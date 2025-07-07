@@ -1,0 +1,58 @@
+[
+  {
+    "question": [
+      "What approach has classical automated reasoning literature shown to be significantly more efficient for proof-finding?"
+    ],
+    "answer": [
+      "Reasoning in the backward direction (i.e., from the intended conclusion to supporting axioms)."
+    ],
+    "contexts": [
+      "The classical automated reasoning literature has shown that reasoning in the backward direction (i.e. from the intended conclusion to supporting axioms) is significantly more efficient at proof-finding. Importing this intuition into the LM setting, we develop a Backward Chaining algorithm, called LAMBADA , that decomposes reasoning into four sub-modules."
+    ],
+    "ground_truths": [
+      "Reasoning in the backward direction (i.e. from the intended conclusion to supporting axioms) is significantly more efficient at proof-finding."
+    ]
+  },
+  {
+    "question": [
+      "According to Poole and Mackworth (2010), what are the two main approaches to logical reasoning, and what is the primary difference in their starting points?"
+    ],
+    "answer": [
+      "The two main approaches to logical reasoning are Forward Chaining (FC) and Backward Chaining (BC). Forward Chaining starts from the facts and rules (the \"theory\"), making new inferences until the goal is proved or disproved. Backward Chaining, conversely, starts from the goal and recursively breaks it down into sub-goals until they can be proved or disproved based on the theory."
+    ],
+    "contexts": [
+      "there are two major approaches to logical reasoning"
+    ],
+    "ground_truths": [
+      "The two major approaches to logical reasoning are Forward Chaining (FC) and Backward Chaining (BC). FC starts from facts and rules, while BC starts from the goal."
+    ]
+  },
+  {
+    "question": [
+      "How does backward CoT compare to forward chaining in terms of proof accuracy?"
+    ],
+    "answer": [
+      "In terms of proof accuracy, backward CoT produces substantially lower quality proofs compared to forward chaining."
+    ],
+    "contexts": [
+      "For proof accuracy, however, we see a clear difference between the two versions where backward CoT produces substantially lower quality proofs compared to forward chaining."
+    ],
+    "ground_truths": [
+      "Backward CoT produces substantially lower quality proofs compared to forward chaining."
+    ]
+  },
+  {
+    "question": [
+      "What is the general accuracy of LAMBADA's predictions when it labels something as PROVED or DISPROVED?"
+    ],
+    "answer": [
+      "Whenever LAMBADA predicts PROVED or DISPROVED, the prediction is mostly correct."
+    ],
+    "contexts": [
+      "According to the results, we observe that whenever LAMBADA predicts PROVED or DISPROVED , the prediction is mostly correct. The accuracy is slightly more on cases where the prediction is PROVED than DISPROVED . We believe this is because DISPROVED cases typically involve negation that makes the reasoning more complex. However, there are several examples for which the label is PROVED or DISPROVED , whereas the model predicts UNKNOWN ."
+    ],
+    "ground_truths": [
+      "whenever LAMBADA predicts PROVED or DISPROVED , the prediction is mostly correct."
+    ]
+  }
+]
