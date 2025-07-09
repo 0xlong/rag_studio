@@ -25,6 +25,32 @@ A table of contents helps users quickly navigate large READMEs.
 
 <!--
 ====================
+ RAG STUDIO PIPELINE OVERVIEW
+====================
+A high-level, actionable summary of the app's main logic and flow for junior developers.
+-->
+## RAG Studio Pipeline Overview
+
+The application consists of two main components:
+1. **Frontend (UI)**: Built with Streamlit, this is the user-facing application where you configure your RAG pipeline.
+   - **Data Section**: Define your data sources (e.g., documents, PDFs, text files).
+   - **Indexing & Storage**: Set up your vector store (e.g., FAISS, Pinecone, ChromaDB) to efficiently store and retrieve embeddings.
+   - **Retrieval & Reranking**: Configure how to retrieve relevant documents and re-rank them for better quality.
+   - **Generation & Prompting**: Define your prompt templates and generation strategy.
+   - **Model Management**: Choose and configure your language models (e.g., GPT-4, Claude, LLaMA) for generation.
+   - **Evaluation**: Measure the performance of your RAG system using metrics like MRR, MAP, and ROUGE.
+
+2. **Backend (RAG Pipeline)**: The logic that runs in the background, handling data ingestion, embedding generation, retrieval, and generation.
+   - **Data Ingestion**: Load and process your documents (e.g., chunking, cleaning, embedding).
+   - **Indexing**: Store embeddings in your vector store.
+   - **Retrieval**: Use your vector store to find relevant documents.
+   - **Reranking**: Re-rank retrieved documents to improve the quality of the final answer.
+   - **Generation**: Use your language model to generate the final answer based on the retrieved and re-ranked documents.
+
+The app provides a user-friendly interface to configure these components and monitor their performance.
+
+<!--
+====================
  FEATURES
 ====================
 List the main features of your project. Use emojis for clarity and visual appeal.
@@ -125,34 +151,13 @@ The application follows a modular design with separate sections for each major c
 
 <!--
 You can add a diagram here using Mermaid or an image:
-```mermaid
-graph TD;
+
+
   Data-->Indexing;
   Indexing-->Retrieval;
   Retrieval-->Generation;
   Generation-->Evaluation;
-```
--->
 
-<!--
-====================
- CONTRIBUTING
-====================
-Encourage others to contribute and explain how.
--->
-## Contributing
-Contributions are welcome! Please open issues or pull requests. Follow PEP8 style and write clear commit messages.
-
-<!--
-====================
- TESTING
-====================
-Explain how to run tests and what frameworks are used.
--->
-## Testing
-<!--
-Add instructions for running tests, e.g.:
-pytest tests/
 -->
 
 <!--
