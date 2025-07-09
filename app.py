@@ -124,11 +124,6 @@ with st.sidebar:
         }
     )
 
-    with st.expander("Templates"):
-        st.write("MultiQuery")
-        st.write("HyDE")
-        st.write("IRCoT")
-
 # Main content area
 def render_data_section():
     
