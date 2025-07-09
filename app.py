@@ -1,14 +1,11 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
-import plotly.express as px
 import pandas as pd
-import numpy as np
 import tempfile
 import os
 from backend import load_document, chunking_fixed_size, chunking_recursive, chunking_by_doc_type, chunking_sentence_window, chunking_semantic, chunking_propositions, embed_dense, embed_sparse, add_to_vector_store, query_transform, retrieve_dense, retrieve_hybrid, retrieve_sparse, rerank_cross_encoder, rerank_llm_judge, generate_rag_response, make_ragas_evaluationset, make_eval_dataset_and_results
 from data_info import chunking_strategies_comparison_df, get_proposition_prompt_text, VECTOR_STORES_COMPARISON, RERANKING_TECHNIQUES_COMPARISON, RETRIEVAL_TECHNIQUES_COMPARISON
 import json
-from langchain_community.vectorstores import Chroma, FAISS
 
 # Set page configuration
 st.set_page_config(
@@ -185,10 +182,10 @@ def render_data_section():
 def render_chunking_section():
     # Text Splitting & Chunking
     st.subheader("Chunking Strategy")
-    #st.markdown("Chunking is the process of breaking down large documents into smaller, manageable pieces.")
+    st.markdown("Chunking is the process of breaking down large documents into smaller, manageable pieces.")
     
     # Display the table in an expander using data from data_info.py
-    with st.expander("Chunking is the process of breaking down large documents into smaller pieces. Here are some strategies to choose from:"):
+    with st.expander("Chunking methods comparison"):
         st.dataframe(
             chunking_strategies_comparison_df(),
             use_container_width=True, 
@@ -276,7 +273,7 @@ def render_chunking_section():
                 # Chunking parameters in second column
                 chunk_size = st.slider("Chunk Size", 100, 2000, 500)
                 chunk_overlap = st.slider("Chunk Overlap", 0, 200, 50)
-
+        
         if st.button("Chunk", type='primary'):
             if separator_mode == "Custom" and not separators:
                 st.error("Please enter at least one custom separator")
@@ -587,10 +584,7 @@ def render_embeddings_section():
     st.subheader("Embedding Model Selection")
     
     # Simple explanation for users and junior devs:
-    st.markdown(
-        """Embeddings turn text into numbers (vectors) so we can compare meaning quantitatively. There dense and sparse types.<br><br>""",
-        unsafe_allow_html=True
-    )
+    st.markdown("Embeddings turn text into numbers (vectors) so we can compare meaning quantitatively. There dense and sparse types.")
 
     # Choose chunking file
     with st.expander("Select chunking source", expanded=False):
@@ -913,6 +907,7 @@ def render_vector_stores_section():
                 ["In-memory", "Local Disk"],
                 help="Choose where to store documents. 'In-memory' is fast but not persistent. 'Local Disk' saves to disk."
             )
+            
             # Show parameter tuning controls based on selected FAISS index type
             if faiss_params == "IVF":
                 # IVF index needs 'nlist' parameter (number of clusters)
@@ -934,470 +929,425 @@ def render_vector_stores_section():
                     step=1,
                     help="Number of neighbors for HNSW. Higher = more accurate, more memory. Default is 32."
                 )
-
-        st.info(f"Provider ({st.session_state.get('embedding_provider')})"
-                 f"\n Model ({st.session_state.get('embedding_model_name')}) "
-                 f"\n Dimensions ({st.session_state.get('embedding_dimensions')})")
         
-
-    # --- VECTOR STORE CREATION BUTTON ---
-    if st.button("Create Vector Store", type='primary', key="create_vector_store"):
-        
-        # It prepares a configuration dictionary for the selected vector store and calls the backend function.
-        vector_store_config = {}
-        vector_store_config['distance_metric'] = distance_metric
-
-        if vector_store == "FAISS":
-            # If FAISS is chosen, we specify the index type and docstore type selected by the user.
-            vector_store_config['index_type'] = faiss_params.lower()
-            vector_store_config['docstore_type'] = docstore_type.replace(" ", "_").lower()
+    if vector_store:
+        if st.button("Create Vector Store", type='primary', key="create_vector_store"):
             
-            if faiss_params == "IVF":
-                # For IVF, we pass the number of clusters ('nlist').
-                vector_store_config['nlist'] = nlist
-            elif faiss_params == "HNSW":
-                # For HNSW, we pass the number of neighbors ('m').
-                vector_store_config['hnsw_m'] = hnsw_m
+            # It prepares a configuration dictionary for the selected vector store and calls the backend function.
+            vector_store_config = {}
+            vector_store_config['distance_metric'] = distance_metric
+
+            if vector_store == "FAISS":
+                # If FAISS is chosen, we specify the index type and docstore type selected by the user.
+                vector_store_config['index_type'] = faiss_params.lower()
+                vector_store_config['docstore_type'] = docstore_type.replace(" ", "_").lower()
+                
+                if faiss_params == "IVF":
+                    # For IVF, we pass the number of clusters ('nlist').
+                    vector_store_config['nlist'] = nlist
+                elif faiss_params == "HNSW":
+                    # For HNSW, we pass the number of neighbors ('m').
+                    vector_store_config['hnsw_m'] = hnsw_m
 
 
-        # 2. Check if there are embedded documents available in the session state.
-        #    This is crucial because we can only create a vector store if we have embeddings.
-        if 'embedded_documents' in st.session_state and st.session_state.embedded_documents:
+            # 2. Check if there are embedded documents available in the session state.
+            #    This is crucial because we can only create a vector store if we have embeddings.
+            if 'embedded_documents' in st.session_state and st.session_state.embedded_documents:
 
-            # A spinner is shown to the user to indicate that a process is running.
-            with st.spinner(f"Creating {vector_store} vector store..."):
-            
-                # 3. Retrieve the embedded documents from the session state.
-                embedded_docs = st.session_state.embedded_documents
+                # A spinner is shown to the user to indicate that a process is running.
+                with st.spinner(f"Creating {vector_store} vector store..."):
                 
-                # 4. Call the backend function 'add_to_vector_store' with the necessary parameters:
-                #    - The documents with their embeddings.
-                #    - The type of vector store to create (e.g., 'faiss', 'chroma').
-                #    - The configuration dictionary with specific parameters.
-                vector_store_handle = add_to_vector_store(
-                    docs=embedded_docs,
-                    vector_store_type=vector_store.lower(),
-                    vector_store_config=vector_store_config,
-                    embedding_provider=st.session_state.get('embedding_provider'),
-                    embedding_model_name=st.session_state.get('embedding_model_name')
-                )
-                
-                # 5. Store the returned vector store object (handle) in the session state.
-                #    This allows us to reuse the vector store in other parts of the app, like the Retrieval section.
-                st.session_state.vector_store = vector_store_handle
-                
-                # 6. Display a success message to the user.
-                st.success(f"Successfully created and loaded {vector_store} vector store! - {vector_store_handle}")
-                with st.expander("Retrieved docs", expanded = True):
-                    retriever = st.session_state.vector_store.as_retriever(search_type="similarity_score_threshold",  # Use similarity search (default for most vector stores)
-                                                                            search_kwargs={
-                                                                                "k": 1,  # Number of top documents to retrieve
-                                                                                "score_threshold": 0.0,  # Minimum similarity score to return a result
-                                                                                "where_document": {"$or": [{"$contains": "kpathsea"}, # keywords to filter on
-                                                                                                        {"$contains": "xxxsandra"}]
-                                                                                                    } 
-                                                                            })
-                    # check if retriever works
-                    #st.write(retriever.invoke("which car?"))
-        else:
-            # If no embedded documents are found, a warning is shown to the user.
-            st.warning("Please embed your documents first in the Embeddings section.")
+                    # 3. Retrieve the embedded documents from the session state.
+                    embedded_docs = st.session_state.embedded_documents
+                    
+                    # 4. Call the backend function 'add_to_vector_store' with the necessary parameters:
+                    #    - The documents with their embeddings.
+                    #    - The type of vector store to create (e.g., 'faiss', 'chroma').
+                    #    - The configuration dictionary with specific parameters.
+                    vector_store_handle = add_to_vector_store(
+                        docs=embedded_docs,
+                        vector_store_type=vector_store.lower(),
+                        vector_store_config=vector_store_config,
+                        embedding_provider=st.session_state.get('embedding_provider'),
+                        embedding_model_name=st.session_state.get('embedding_model_name')
+                    )
+                    
+                    # 5. Store the returned vector store object (handle) in the session state.
+                    #    This allows us to reuse the vector store in other parts of the app, like the Retrieval section.
+                    st.session_state.vector_store = vector_store_handle
+                    
+                    # 6. Display a success message to the user.
+                    st.success(f"Successfully created and loaded {vector_store} vector store! - {vector_store_handle}")
+                    with st.expander("Retrieved docs", expanded = True):
+                        retriever = st.session_state.vector_store.as_retriever(search_type="similarity_score_threshold",  # Use similarity search (default for most vector stores)
+                                                                                search_kwargs={
+                                                                                    "k": 1,  # Number of top documents to retrieve
+                                                                                    "score_threshold": 0.0,  # Minimum similarity score to return a result
+                                                                                    "where_document": {"$or": [{"$contains": "kpathsea"}, # keywords to filter on
+                                                                                                            {"$contains": "xxxsandra"}]
+                                                                                                        } 
+                                                                                })
+                        # check if retriever works
+                        #st.write(retriever.invoke("which car?"))
+            else:
+                # If no embedded documents are found, a warning is shown to the user.
+                st.warning("Please embed your documents first in the Embeddings section.")
 
 def render_retrieval_section():
     st.markdown("### Retrieval")
+    st.markdown("Methods to retrieve relevant documents given user question.")
     
-    with st.expander("State vars:", expanded=False):
-        st.write(dict(st.session_state))
+    with st.expander("Retrieval Type Comparison"):
+        df = pd.DataFrame(RETRIEVAL_TECHNIQUES_COMPARISON)
+        st.dataframe(df, hide_index=True)
 
     # Query input field for user to type their search query
     query = st.text_input(
-        "Search in document",
-        help="This is the text used to find the most relevant chunks."
+        "User question",
+        placeholder="Enter a question about the document here...",
+        help="This is the text used to find the most relevant chunks.",
+        label_visibility="visible"
     )
     # Store query in session state for use in other sections
     if query:
         st.session_state['query'] = query
 
-    with st.expander("Retrieval Type Comparison"):
-
-        df = pd.DataFrame(RETRIEVAL_TECHNIQUES_COMPARISON)
-        st.dataframe(df, hide_index=True)
-
-    with st.expander("Retrieval Type Selection"):
+        retrieval_type = st.segmented_control(
+                "Retrieval Type Selection",
+                ["Dense", "Sparse", "Hybrid"],
+                help="Choose how to retrieve documents: Dense (semantic), Sparse (keyword), or Hybrid (both).")
 
         # Always initialize these variables to False at the start
         menu_dense_retrieval = False
         menu_sparse_retrieval = False
         menu_hybrid = False
 
-        retrieval_type = st.segmented_control(
-            None,
-            ["Dense", "Sparse", "Hybrid"],
-            help="Choose how to retrieve documents: Dense (semantic), Sparse (keyword), or Hybrid (both).")
-
         if retrieval_type == "Sparse":
+            st.write("\n")
+            st.markdown("###### Sparse Retrieval Parameters")
             menu_sparse_retrieval = True
 
         elif retrieval_type == "Dense":
+            st.write("\n")
+            st.markdown("###### Dense Retrieval Parameters")
             menu_dense_retrieval = True
-            st.info(f"Dense method embedding provider: {st.session_state.get('embedding_provider')}, model: {st.session_state.get('embedding_model_name')}, dimensions: {st.session_state.get('embedding_dimensions')}")
                     
         elif retrieval_type == "Hybrid":
+            st.write("\n")
+            st.markdown("###### Hybrid Retrieval Parameters")
             menu_hybrid = True
-        
-
-    if menu_dense_retrieval:
-
-        # Query Transformation
-        with st.expander("Query Transformation"):
-
-            # create columns - for transformation type (column 1) and transformed query display (column 2)
-            col1, col2 = st.columns(2, border=True)
-
-            with col1:
-                query_transform_method = st.segmented_control(
-                    "Query transformation method",
-                    ["No Transformation", "Multi-Query", "HyDE", "Step-Back Prompting"],
-                    label_visibility="collapsed",
-                    help=(
-                        "Choose how to transform your query before searching:\n"
-                        "- No Transformation: Use your query as-is.\n"
-                        "- Multi-Query: Generate several alternative phrasings of your query to improve recall.\n"
-                        "- HyDE: Create a hypothetical answer to your query, then search for documents similar to that answer.\n"
-                        "- Step-Back Prompting: Make your query more general to find broader context, then use that context to answer your specific question.\n"
-                        "\n"
-                        "Tip: These methods help the system find more relevant information, especially when your original query is too specific or phrased differently than the documents."
-                    )
-                )  # This segmented control lets the user pick how to transform their query before retrieval. Each method is explained above for clarity.
-                
-                if st.button("Transform query"):
-                    if not query:
-                        st.warning("Please enter a query to transform.")
-                    else:
-                        # Prepare the mode for the backend function (transforms Multi-Query to multi_query)
-                        query_transformation_type = query_transform_method.replace(" ", "_").replace("-", "_").lower()
-
-                        # Call the backend function to perform the query transformation
-                        transformed_query = query_transform(query, mode=query_transformation_type)
-
-                        # Store the transformed query in session state so it can be accessed later
-                        st.session_state['retrieval_dense_transformed_query'] = transformed_query[0]
-            
-            with col2:
-                if 'query' in st.session_state:
-                    if query:
-                        st.markdown("##### Transformed Query")
-                        st.info(st.session_state.get('retrieval_dense_transformed_query', query))
-        
-        with st.expander("Search type"):
-            dense_search_type = st.segmented_control(
-                    "Search Type for dense retrieval",
-                    ["Similarity score", "Maximum Marginal Relevance (MMR)"],
-                    label_visibility="collapsed",
-                    help=("(MMR (Maximum Marginal Relevance): Balances relevance and diversity by selecting documents similar to the query but dissimilar to each other, reducing redundancy. Ideal for varied, relevant results. Similarity Score: Ranks documents by cosine similarity to the query, prioritizing the most similar items for precise, focused searches.)"
-                          )
-            )
-
-        if dense_search_type == 'Similarity score':
-            
-            search_type_chosen = 'similarity_score_threshold'
-
-            # similarity_score_threshold
-            with st.expander("similarity score threshold"):
-
-                similarity_score_threshold = st.slider(
-                "",
-                min_value=0.0,
-                max_value=1.0,
-                value=0.7, # A common starting point, adjust based on your data
-                step=0.01,
-                format="%.2f",
-                help="Documents with a similarity score below this threshold will be filtered out. Higher values mean stricter filtering.",
-                label_visibility='visible'
-                )
-                
-            # Initialize MMR parameters with default values for similarity search
-            st.session_state['retrieval_dense_mmr_fetch_k'] = 20
-            st.session_state['retrieval_dense_mmr_lambda_mult'] = 0.5
-
-        elif dense_search_type == 'Maximum Marginal Relevance (MMR)':
-
-            search_type_chosen = 'mmr'
-
-            # Number of candidates to fetch before reranking
-            with st.expander("Fetch-K (candidates for MMR)"):
-                fetch_k = st.slider("Number of candidates to fetch", 5, 100, 20)
-                st.session_state['retrieval_dense_mmr_fetch_k'] = fetch_k
-
-            # Lambda multiplier for diversity vs relevance
-            with st.expander("Lambda (diversity vs relevance)"):
-                lambda_mult = st.slider(
-                    "Lambda (0 = more diverse, 1 = more relevant)",
-                    min_value=0.0, max_value=1.0, value=0.5, step=0.01
-                )
-                st.session_state['retrieval_dense_mmr_lambda_mult'] = lambda_mult
-        
 
 
-        # Top k documents to retrieve
-        with st.expander("Top-K documents"):
-            top_k = st.slider("", 1, 20, 10)
-            st.session_state['retrieval_dense_top_k'] = top_k
+        if menu_dense_retrieval:
 
-        with st.expander("keywords to filter documents (comma-separated), provide at least 2"):
-            # Let the user enter keywords separated by commas
-            keyword_input = st.text_input(
-                "",
-                help="Only documents containing at least one of these keywords will be retrieved. To retrieve docs similarity score has to be set low."
-            )
-            # Convert the input string to a list of keywords, removing whitespace
-            keywords = [kw.strip() for kw in keyword_input.split(",") if kw.strip()]
-            st.session_state['retrieval_dense_keywords'] = keywords
-            
-        # Initialize all session state variables with default values if they don't exist
-        if 'retrieval_dense_mmr_fetch_k' not in st.session_state:
-            st.session_state['retrieval_dense_mmr_fetch_k'] = 20
-        if 'retrieval_dense_mmr_lambda_mult' not in st.session_state:
-            st.session_state['retrieval_dense_mmr_lambda_mult'] = 0.5
-        if 'retrieval_dense_keywords' not in st.session_state:
-            st.session_state['retrieval_dense_keywords'] = []
+            # Query Transformation
+            with st.expander("Query Transformation"):
 
+                # create columns - for transformation type (column 1) and transformed query display (column 2)
+                col1, col2 = st.columns(2, border=True)
 
-
-        if st.button("Retrieve (dense)", type='primary'):
-
-            # Check if a vector store exists in session state
-            if 'vector_store' not in st.session_state or st.session_state.vector_store is None:
-                st.warning("Please create or load a vector store first in the Vector Stores section.")
-
-            # check if query exist, if not info
-            elif not query:
-                st.warning("Please enter a query to retrieve documents.")
-
-            elif not dense_search_type:
-                st.warning("Please enter a query to retrieve documents.")
-
-            # if vector store and query exist
-            else:
-                # Use the transformed query if it exists in session state, otherwise use the original query.
-                query_for_retrieval = st.session_state.get("retrieval_dense_transformed_query", query)
-                st.info(query_for_retrieval)
-
-                with st.spinner("Retrieving relevant documents..."):
-                    try:
-                        
-                        # Get parameters with safe defaults
-                        fetch_k = st.session_state.get('retrieval_dense_mmr_fetch_k', 20)
-                        lambda_mult = st.session_state.get('retrieval_dense_mmr_lambda_mult', 0.5)
-                        keywords = st.session_state.get('retrieval_dense_keywords', [])
-                        top_k = st.session_state.get('retrieval_dense_top_k', 10)
-
-                        # retrieve documents from vector store related to query with given params
-                        retrieved_docs = retrieve_dense(
-                            query=query_for_retrieval,
-                            vector_store=st.session_state.vector_store,
-                            top_k=top_k,
-                            fetch_k=fetch_k,
-                            lambda_mult=lambda_mult,
-                            keywords=keywords,
-                            search_type=search_type_chosen
+                with col1:
+                    query_transform_method = st.segmented_control(
+                        "Query transformation method",
+                        ["No Transformation", "Multi-Query", "HyDE", "Step-Back Prompting"],
+                        label_visibility="collapsed",
+                        help=(
+                            "Choose how to transform your query before searching:\n"
+                            "- No Transformation: Use your query as-is.\n"
+                            "- Multi-Query: Generate several alternative phrasings of your query to improve recall.\n"
+                            "- HyDE: Create a hypothetical answer to your query, then search for documents similar to that answer.\n"
+                            "- Step-Back Prompting: Make your query more general to find broader context, then use that context to answer your specific question.\n"
+                            "\n"
+                            "Tip: These methods help the system find more relevant information, especially when your original query is too specific or phrased differently than the documents."
                         )
-
-                        st.session_state['retrieval_dense_search_type'] = search_type_chosen
-                        
-                        # Show results in the expander
-                        with st.expander("Retrieved Documents", expanded=True):
-                            
-                            # display docs if exist
-                            if retrieved_docs:
-                                st.write("Retrieved results:", retrieved_docs)
-                                st.session_state['retrieved_docs'] = retrieved_docs
-                                st.session_state['retrieval_type'] = 'dense'
-                            else:
-                                st.info("No documents found above the threshold. (TIP: Lower the threshold to include more results.)")
-                            
-                    except Exception as e:
-                        st.error(f"Error during retrieval: {e}")
-
-    elif menu_hybrid:
-
-        with st.expander("Dense vs Sparse weights"):
-            alpha = st.slider("Choose weights - 1-dense scores more important; 0-sparse scores more important", 0.0, 1.0, 0.5)
-
-        with st.expander("How many docs to retrieve"):
-            top_k = st.slider("", 0, 20, 10)
-        
-        # get documents with dense and sparse embeddings (if exist)
-        dense_chunks = st.session_state.get('embedded_documents', [])
-        sparse_chunks = st.session_state.get('embedded_documents_sparse', [])
-
-        # 3. Get embedding model info
-        embedding_provider = st.session_state.get('embedding_provider')
-        embedding_model_name = st.session_state.get('embedding_model_name')
-
-        # 4. Get sparse embedding info
-        embedding_sparse_method = st.session_state.get('embedding_sparse_method')
-        embedding_sparse_kparam = st.session_state.get('embedding_sparse_kparam', 1.5)
-        embedding_sparse_bparam = st.session_state.get('embedding_sparse_bparam', 0.75)
-
-        if st.button("Retrieve (Hybrid)"):
-            with st.spinner("Retrieving relevant documents (hybrid)..."):
-                try:
-                    retrieved_docs_hybrid = retrieve_hybrid(
-                        query=query,
-                        embedding_provider=embedding_provider,
-                        embedding_model_name=embedding_model_name,
-                        embedding_sparse_method=embedding_sparse_method,
-                        embedding_sparse_kparam=embedding_sparse_kparam,
-                        embedding_sparse_bparam=embedding_sparse_bparam,
-                        dense_chunks=dense_chunks,
-                        sparse_chunks=sparse_chunks,
-                        alpha=alpha,
-                        top_k=top_k
-                    )
-
-                    # save session state variables
-                    st.session_state['retrieved_docs'] = retrieved_docs_hybrid
-                    st.session_state['retrieval_type'] = 'hybrid'
-                    st.session_state['retrieval_hybrid_alpha'] = alpha
-                    st.session_state['retrieval_hybrid_top_k'] = top_k
-
-                    # display results
-                    if 'retrieved_docs' in st.session_state:
-                        st.write("Retrieved results:", st.session_state['retrieved_docs'])
-                    else:
-                        st.info("No documents found above the threshold.")
+                    )  # This segmented control lets the user pick how to transform their query before retrieval. Each method is explained above for clarity.
                     
-                except Exception as e:
-                    st.error(f"Error during hybrid retrieval: {e}")
- 
-    elif menu_sparse_retrieval:
-        
-        # display info about sparse params chosen in embedding section if any
-        if st.session_state.get('embedding_sparse_method') == 'bm25':
-            st.info(f"Sparse method chosen in Embeddings section: {st.session_state.get('embedding_sparse_method')} - (kparam: {st.session_state.get('embedding_sparse_kparam')}, bparam: {st.session_state.get('embedding_sparse_bparam')})")
-        elif st.session_state.get('embedding_sparse_method') == 'tfidf':
-            st.info(f"Sparse method chosen in Embeddings section: {st.session_state.get('embedding_sparse_method')}")
-        else:
-            st.info(f"Sparse params NOT chosen in Embeddings section. Choose below.")
+                    if st.button("Transform query"):
+                        if not query:
+                            st.warning("Please enter a query to transform.")
+                        else:
+                            # Prepare the mode for the backend function (transforms Multi-Query to multi_query)
+                            query_transformation_type = query_transform_method.replace(" ", "_").replace("-", "_").lower()
+
+                            # Call the backend function to perform the query transformation
+                            transformed_query = query_transform(query, mode=query_transformation_type)
+
+                            # Store the transformed query in session state so it can be accessed later
+                            st.session_state['retrieval_dense_transformed_query'] = transformed_query[0]
+                
+                with col2:
+                    if 'query' in st.session_state:
+                        if query:
+                            st.markdown("##### Transformed Query")
+                            st.info(st.session_state.get('retrieval_dense_transformed_query', query))
             
-        # documents with sparse embeddings from Embedding section which are taken from streamlit session_state
-        sparse_chunks = st.session_state.get('embedded_documents_sparse', [])
-        if not sparse_chunks:
-            st.warning("No sparse embeddings found and no chunked documents available. Please embed your documents first or choose embeddings from below.")
-            
-            # 1. List all chunking files in the data/chunking directory (JSON only)
-            sparse_embeddings_dir = os.path.join("data", "embeddings","sparse")
-            sparse_embeddings_files = [f for f in os.listdir(sparse_embeddings_dir) if f.endswith(".json")]
-
-            # 2. Let the user select a file
-            selected_file = st.segmented_control(
-                "Select embeddding file",
-                sparse_embeddings_files,
-                label_visibility="collapsed"
-            )
-
-            # 3. Load the selected file when chosen
-            if selected_file:
-                file_path = os.path.join(sparse_embeddings_dir, selected_file)
-                try:
-                    # Load the JSON file as a list of dicts (each dict is a chunk)
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        chunked_data = json.load(f)
-                    # Store in session state for use in embedding, etc.
-                    st.session_state.embedded_documents_sparse = chunked_data
-                    st.success(f"Loaded {len(chunked_data)} chunks from {selected_file}")
-    
-                except Exception as e:
-                    st.error(f"Error loading file: {e}")
-                    chunked_data = []
-
-        # check if query provided
-        if not query:
-            st.warning("Please enter a query.")
-
-        # if there is no sparse method then choose params
-        if not st.session_state.get('embedding_sparse_method'):
-            # Parameters selection for sparse model
-            with st.expander("Select Sparse Model", expanded=False):
-            
-                # Model selection is separated for clarity
-                sparse_model = st.segmented_control(
-                    "Sparse Model",
-                    ["BM25", "TF-IDF"],
-                    help="Sparse models are useful for keyword-based retrieval. BM25 is classic, SPLADE is neural, TF-IDF is simple."
+            with st.expander("Search type"):
+                dense_search_type = st.segmented_control(
+                        "Search Type for dense retrieval",
+                        ["Similarity score", "Maximum Marginal Relevance (MMR)"],
+                        label_visibility="collapsed",
+                        help=("(MMR (Maximum Marginal Relevance): Balances relevance and diversity by selecting documents similar to the query but dissimilar to each other, reducing redundancy. Ideal for varied, relevant results. Similarity Score: Ranks documents by cosine similarity to the query, prioritizing the most similar items for precise, focused searches.)"
+                            )
                 )
+
+            if dense_search_type == 'Similarity score':
+                
+                search_type_chosen = 'similarity_score_threshold'
+
+                # similarity_score_threshold
+                with st.expander("similarity score threshold"):
+
+                    similarity_score_threshold = st.slider(
+                    "",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.7, # A common starting point, adjust based on your data
+                    step=0.01,
+                    format="%.2f",
+                    help="Documents with a similarity score below this threshold will be filtered out. Higher values mean stricter filtering.",
+                    label_visibility='visible'
+                    )
+                    
+                # Initialize MMR parameters with default values for similarity search
+                st.session_state['retrieval_dense_mmr_fetch_k'] = 20
+                st.session_state['retrieval_dense_mmr_lambda_mult'] = 0.5
+
+            elif dense_search_type == 'Maximum Marginal Relevance (MMR)':
+
+                search_type_chosen = 'mmr'
+
+                # Number of candidates to fetch before reranking
+                with st.expander("Fetch-K (candidates for MMR)"):
+                    fetch_k = st.slider("Number of candidates to fetch", 5, 100, 20)
+                    st.session_state['retrieval_dense_mmr_fetch_k'] = fetch_k
+
+                # Lambda multiplier for diversity vs relevance
+                with st.expander("Lambda (diversity vs relevance)"):
+                    lambda_mult = st.slider(
+                        "Lambda (0 = more diverse, 1 = more relevant)",
+                        min_value=0.0, max_value=1.0, value=0.5, step=0.01
+                    )
+                    st.session_state['retrieval_dense_mmr_lambda_mult'] = lambda_mult
             
-            # save sparse_model selection in streamlit session state
-            if sparse_model:
-                st.session_state["embedding_sparse_method"] = sparse_model.lower().replace("-", "")
 
-                with st.expander("Sparse Model Parameters", expanded=False):
 
-                    # Show only the parameters relevant to the selected model
-                    if sparse_model == "BM25":
+            # Top k documents to retrieve
+            with st.expander("Top-K documents"):
+                top_k = st.slider("", 1, 20, 10)
+                st.session_state['retrieval_dense_top_k'] = top_k
 
-                        # BM25 parameters explained
-                        k1 = st.slider(
-                            "k1 (BM25 parameter)", 0.5, 3.0, 1.5, step=0.1,
-                            help=(
-                                "k1 controls how much term frequency (word count) boosts the score. "
-                                "Low k1: extra occurrences of a word add little. High k1: more boost, but with diminishing returns. "
-                                "Typical values: 1.2-2.0. "
-                                "If unsure, use the default (1.5)."
-                            )
+            with st.expander("keywords to filter documents (comma-separated), provide at least 2"):
+                # Let the user enter keywords separated by commas
+                keyword_input = st.text_input(
+                    "",
+                    help="Only documents containing at least one of these keywords will be retrieved. To retrieve docs similarity score has to be set low."
+                )
+                # Convert the input string to a list of keywords, removing whitespace
+                keywords = [kw.strip() for kw in keyword_input.split(",") if kw.strip()]
+                st.session_state['retrieval_dense_keywords'] = keywords
+                
+            # Initialize all session state variables with default values if they don't exist
+            if 'retrieval_dense_mmr_fetch_k' not in st.session_state:
+                st.session_state['retrieval_dense_mmr_fetch_k'] = 20
+            if 'retrieval_dense_mmr_lambda_mult' not in st.session_state:
+                st.session_state['retrieval_dense_mmr_lambda_mult'] = 0.5
+            if 'retrieval_dense_keywords' not in st.session_state:
+                st.session_state['retrieval_dense_keywords'] = []
+
+            if dense_search_type:
+                if st.button("Retrieve (dense)", type='primary'):
+
+                    # Check if a vector store exists in session state
+                    if 'vector_store' not in st.session_state or st.session_state.vector_store is None:
+                        st.warning("Please create or load a vector store first in the Vector Stores section.")
+
+                    # if vector store and query exist
+                    else:
+                        # Use the transformed query if it exists in session state, otherwise use the original query.
+                        query_for_retrieval = st.session_state.get("retrieval_dense_transformed_query", query)
+                        st.info(query_for_retrieval)
+
+                        with st.spinner("Retrieving relevant documents..."):
+                            try:
+                                
+                                # Get parameters with safe defaults
+                                fetch_k = st.session_state.get('retrieval_dense_mmr_fetch_k', 20)
+                                lambda_mult = st.session_state.get('retrieval_dense_mmr_lambda_mult', 0.5)
+                                keywords = st.session_state.get('retrieval_dense_keywords', [])
+                                top_k = st.session_state.get('retrieval_dense_top_k', 10)
+
+                                # retrieve documents from vector store related to query with given params
+                                retrieved_docs = retrieve_dense(
+                                    query=query_for_retrieval,
+                                    vector_store=st.session_state.vector_store,
+                                    top_k=top_k,
+                                    fetch_k=fetch_k,
+                                    lambda_mult=lambda_mult,
+                                    keywords=keywords,
+                                    search_type=search_type_chosen
+                                )
+
+                                st.session_state['retrieval_dense_search_type'] = search_type_chosen
+                                
+                                # Show results in the expander
+                                with st.expander("Retrieved Documents", expanded=True):
+                                    
+                                    # display docs if exist
+                                    if retrieved_docs:
+                                        st.write("Retrieved results:", retrieved_docs)
+                                        st.session_state['retrieved_docs'] = retrieved_docs
+                                        st.session_state['retrieval_type'] = 'dense'
+                                    else:
+                                        st.info("No documents found above the threshold. (TIP: Lower the threshold to include more results.)")
+                                    
+                            except Exception as e:
+                                st.error(f"Error during retrieval: {e}")
+
+        elif menu_hybrid:
+
+            with st.expander("Dense vs Sparse weights"):
+                alpha = st.slider("Choose weights - 1-dense scores more important; 0-sparse scores more important", 0.0, 1.0, 0.5)
+
+            with st.expander("How many docs to retrieve"):
+                top_k = st.slider("", 0, 20, 10)
+            
+            # get documents with dense and sparse embeddings (if exist)
+            dense_chunks = st.session_state.get('embedded_documents', [])
+            sparse_chunks = st.session_state.get('embedded_documents_sparse', [])
+
+            # 3. Get embedding model info
+            embedding_provider = st.session_state.get('embedding_provider')
+            embedding_model_name = st.session_state.get('embedding_model_name')
+
+            # 4. Get sparse embedding info
+            embedding_sparse_method = st.session_state.get('embedding_sparse_method')
+            embedding_sparse_kparam = st.session_state.get('embedding_sparse_kparam', 1.5)
+            embedding_sparse_bparam = st.session_state.get('embedding_sparse_bparam', 0.75)
+
+            if st.button("Retrieve (Hybrid)"):
+                with st.spinner("Retrieving relevant documents (hybrid)..."):
+                    try:
+                        retrieved_docs_hybrid = retrieve_hybrid(
+                            query=query,
+                            embedding_provider=embedding_provider,
+                            embedding_model_name=embedding_model_name,
+                            embedding_sparse_method=embedding_sparse_method,
+                            embedding_sparse_kparam=embedding_sparse_kparam,
+                            embedding_sparse_bparam=embedding_sparse_bparam,
+                            dense_chunks=dense_chunks,
+                            sparse_chunks=sparse_chunks,
+                            alpha=alpha,
+                            top_k=top_k
                         )
-                        b = st.slider(
-                            "b (BM25 parameter)", 0.0, 1.0, 0.75, step=0.01,
-                            help=(
-                                "b controls how much to normalize for document length. "
-                                "b=0: no normalization (long docs not penalized). b=1: full normalization (long docs penalized). "
-                                "Typical value: 0.75. "
-                                "If your docs are similar in length, b doesn't matter much."
-                            )
-                        )
 
-                        # save sparse model param in streamlit session state
-                        st.session_state['embedding_sparse_kparam'] = k1
-                        st.session_state['embedding_sparse_bparam'] = b
+                        # save session state variables
+                        st.session_state['retrieved_docs'] = retrieved_docs_hybrid
+                        st.session_state['retrieval_type'] = 'hybrid'
+                        st.session_state['retrieval_hybrid_alpha'] = alpha
+                        st.session_state['retrieval_hybrid_top_k'] = top_k
+
+                        # display results
+                        if 'retrieved_docs' in st.session_state:
+                            st.write("Retrieved results:", st.session_state['retrieved_docs'])
+                        else:
+                            st.info("No documents found above the threshold.")
                         
-            
-        # no of docs to retrieve
-        with st.expander("Top-K documents (sparse)"):
-            sparse_top_k = st.slider("", 1, 20, 10)
-
-        # Button to trigger sparse retrieval
-        if st.button("Retrieve (Sparse)", key="retrieve_sparse"):
-            # If no sparse embeddings exist, create them from chunked documents
-
-                from backend import retrieve_sparse
-                results = retrieve_sparse(
-                    query,
-                    sparse_chunks,
-                    top_k=sparse_top_k,
-                    embedding_sparse_method=st.session_state.get('embedding_sparse_method'),
-                    bm25_k1 = st.session_state['embedding_sparse_kparam'],
-                    bm25_b = st.session_state['embedding_sparse_bparam']
-                )
-                if results:
-
-                    # assign session state variables
-                    st.session_state['retrieval_type'] = 'sparse'
-                    st.session_state['retrieval_sparse_top_k'] = sparse_top_k
-
-                    # display results
-                    with st.expander("Retrieved Documents", expanded=True):
-                        st.write(results)
-                else:
-                    st.info("No documents found for your query.")
-    else:
-        st.info("No Retrieval Type method chosen.")
+                    except Exception as e:
+                        st.error(f"Error during hybrid retrieval: {e}")
     
+        elif menu_sparse_retrieval:
+            
+            # display info about sparse params chosen in embedding section if any
+            if st.session_state.get('embedding_sparse_method') == 'bm25':
+                st.info(f"Sparse method chosen in Embeddings section: {st.session_state.get('embedding_sparse_method')} - (kparam: {st.session_state.get('embedding_sparse_kparam')}, bparam: {st.session_state.get('embedding_sparse_bparam')})")
+            elif st.session_state.get('embedding_sparse_method') == 'tfidf':
+                st.info(f"Sparse method chosen in Embeddings section: {st.session_state.get('embedding_sparse_method')}")
+            else:
+                st.info(f"Sparse embeddings settings NOT chosen in Embeddings section. Go to Embedding section to create them or create sparse embeddings using below parameters.")
+                
+            # documents with sparse embeddings from Embedding section which are taken from streamlit session_state
+            sparse_chunks = st.session_state.get('embedded_documents_sparse', [])
+
+            # if there is no sparse method then choose params
+            if not st.session_state.get('embedding_sparse_method'):
+                # Parameters selection for sparse model
+                with st.expander("Select Sparse Model", expanded=False):
+                
+                    # Model selection is separated for clarity
+                    sparse_model = st.segmented_control(
+                        "Sparse Model",
+                        ["BM25", "TF-IDF"],
+                        help="Sparse models are useful for keyword-based retrieval. BM25 is classic, SPLADE is neural, TF-IDF is simple."
+                    )
+                
+                # save sparse_model selection in streamlit session state
+                if sparse_model:
+                    st.session_state["embedding_sparse_method"] = sparse_model.lower().replace("-", "")
+
+                    with st.expander("Sparse Model Parameters", expanded=False):
+
+                        # Show only the parameters relevant to the selected model
+                        if sparse_model == "BM25":
+
+                            # BM25 parameters explained
+                            k1 = st.slider(
+                                "k1 (BM25 parameter)", 0.5, 3.0, 1.5, step=0.1,
+                                help=(
+                                    "k1 controls how much term frequency (word count) boosts the score. "
+                                    "Low k1: extra occurrences of a word add little. High k1: more boost, but with diminishing returns. "
+                                    "Typical values: 1.2-2.0. "
+                                    "If unsure, use the default (1.5)."
+                                )
+                            )
+                            b = st.slider(
+                                "b (BM25 parameter)", 0.0, 1.0, 0.75, step=0.01,
+                                help=(
+                                    "b controls how much to normalize for document length. "
+                                    "b=0: no normalization (long docs not penalized). b=1: full normalization (long docs penalized). "
+                                    "Typical value: 0.75. "
+                                    "If your docs are similar in length, b doesn't matter much."
+                                )
+                            )
+
+                            # save sparse model param in streamlit session state
+                            st.session_state['embedding_sparse_kparam'] = k1
+                            st.session_state['embedding_sparse_bparam'] = b
+                            
+                
+            # no of docs to retrieve
+            with st.expander("Top-K documents (sparse)"):
+                sparse_top_k = st.slider("", 1, 20, 10)
+
+            # Button to trigger sparse retrieval
+            if st.button("Retrieve (Sparse)", key="retrieve_sparse"):
+                # If no sparse embeddings exist, create them from chunked documents
+
+                    from backend import retrieve_sparse
+                    results = retrieve_sparse(
+                        query,
+                        sparse_chunks,
+                        top_k=sparse_top_k,
+                        embedding_sparse_method=st.session_state.get('embedding_sparse_method'),
+                        bm25_k1 = st.session_state['embedding_sparse_kparam'],
+                        bm25_b = st.session_state['embedding_sparse_bparam']
+                    )
+                    if results:
+
+                        # assign session state variables
+                        st.session_state['retrieval_type'] = 'sparse'
+                        st.session_state['retrieval_sparse_top_k'] = sparse_top_k
+
+                        # display results
+                        with st.expander("Retrieved Documents", expanded=True):
+                            st.write(results)
+                    else:
+                        st.info("No documents found for your query.")
+  
 def render_reranking_section():
 
     # Reranking Model Selection
     st.subheader("Reranking Model")
-    st.markdown("reorders retrieved documents using different techniques")
+    st.markdown("Reorders retrieved documents using different techniques")
 
     with st.expander("Re-ranking techniques Comparison"):
         # Vector Stores dtaframe comparison
@@ -1558,9 +1508,10 @@ def render_reranking_section():
 def render_generation_section():
     
     # LLM Provider Selection
-    st.subheader("LLM Provider & Model")
-    
-    with st.expander("LLM provider and model"):
+    st.subheader("RAG pipeline generation")
+    st.markdown("In this section we can generate answer from designed RAG pipeline.")
+
+    with st.expander("LLModel settings"):
         
         llm_provider = st.segmented_control(
             "Select LLM Provider",
@@ -1587,120 +1538,108 @@ def render_generation_section():
                     ["hg1", "hg2", "hg3"],
                     help="Select a Hugging Face model for text generation"
                 )
-        else:
-            st.info("Choose LLM provider.")
-    
-    # Generation Parameters
-    with st.expander("Generation Parameters"):
-        model_temperature = st.slider("Temperature", 0.0, 1.0, 0.7)
-        model_max_tokens = st.slider("Max Tokens", 100, 4000, 1000)
-        model_top_p = st.slider("Top P", 0.0, 1.0, 0.9)
+            
+            # if llm model chosen then show parameters
+            if llm_model_name:
+                st.session_state['generation_llm_model_name'] = llm_model_name
+                st.write("\n")
+                model_temperature = st.slider("Temperature", 0.0, 1.0, 0.7)
+                model_max_tokens = st.slider("Max Tokens", 100, 4000, 1000)
+                model_top_p = st.slider("Top P", 0.0, 1.0, 0.9)
+
 
     # Prompt Template Configuration
     with st.expander("Prompt Template"):
-        default_prompt_template = """Context: {context}
-
-Question: {question}
-
-Please provide a comprehensive answer based on the context provided above. If the context doesn't contain enough information to answer the question, please say so.
-
-Answer:"""
-        
+        default_prompt_template = """Context: {context}\nQuestion: {question}\n\nPlease provide a comprehensive answer based on the context provided above. If the context doesn't contain enough information to answer the question, please say so.\n\nAnswer:"""
         prompt_template = st.text_area(
-            "Prompt Template",
+            "Prompt Template to use when generating final RAG response",
             value=default_prompt_template,
             height=200,
             help="Use {context} for retrieved documents and {question} for user query"
         )
 
-    # Display current session state for debugging
-    with st.expander("Current Session State", expanded=False):
-        st.write("Query:", st.session_state.get('retrieval_dense_transformed_query', None))
-        st.write("Reranked docs count:", len(st.session_state.get('reranked_retrieved_docs', [])))
-        st.write("Model provider:", llm_provider if 'llm_provider' in locals() else 'Not selected')
-        st.write("Model:", llm_model_name if 'llm_model_name' in locals() else 'Not selected')
 
-    # Display reranked docs for reference
-    with st.expander("Reranked docs (context)", expanded=False):
-
-        if 'reranked_retrieved_docs' in st.session_state and st.session_state['reranked_retrieved_docs']:
-            st.info(f"Using reranked docs:, {st.session_state.get("reranked_type")}")
-            docs_to_use = st.session_state['reranked_retrieved_docs']
+    # Check if we have the necessary data
+    reranked_docs = None
+    
+    if 'reranked_retrieved_docs' not in st.session_state and not 'retrieved_docs' in st.session_state:
+        st.info("No retrieved docs available. Please retrieve relevant documents or no context (retrieved relevant docs) will be provided to RAG.")
+    else:
+        if 'reranked_retrieved_docs' in st.session_state:
+            info = "using reranked docs"
+            reranked_docs = st.session_state['reranked_retrieved_docs']
         else:
-           st.info("No reranked documents available. Using retrieved docs wihotut reranking.")   
-           docs_to_use = st.session_state['retrieved_docs'] 
-        
-        for i, doc in enumerate(docs_to_use):
-            st.markdown(f"**Document {i+1}:**")
-            if hasattr(doc, 'page_content'):
-                st.write(doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content)
-            elif isinstance(doc, dict) and 'content' in doc:
-                st.write(doc['content'][:300] + "..." if len(doc['content']) > 300 else doc['content'])
-            else:
-                st.write(str(doc)[:300] + "..." if len(str(doc)) > 300 else str(doc))
-            st.write("---")  
+            info = "using docs without reranking"
+            reranked_docs = st.session_state['retrieved_docs']
+
+            if 'generation_llm_model_name' not in st.session_state:
+                st.error("Please choose LLM params.")
+
+        # Display expander with reranked (or retrieved - without reranking) docs if they exist
+        with st.expander(f"Reranked docs (context) - {info}", expanded=False):
+            
+            # if there are any retrieved docs available
+            if reranked_docs is not None:
+                for i, doc in enumerate(reranked_docs):
+                    st.markdown(f"**Document {i+1}:**")
+                    if hasattr(doc, 'page_content'):
+                        st.write(doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content)
+                    elif isinstance(doc, dict) and 'content' in doc:
+                        st.write(doc['content'][:300] + "..." if len(doc['content']) > 300 else doc['content'])
+                    else:
+                        st.write(str(doc)[:300] + "..." if len(str(doc)) > 300 else str(doc))
+                    st.write("---")  
 
     # Generate RAG Response Button
-    if st.button("Generate RAG Response", type='primary'):
-        # Check if we have the necessary data
-        if 'query' not in st.session_state or not st.session_state['query']:
-            st.error("Please enter a query in the Retrieval section first.")
-        elif 'reranked_retrieved_docs' not in st.session_state or not st.session_state['reranked_retrieved_docs']:
-            st.info("No reranking done, will use retrieved docs without reranking.")
-            reranked_docs = st.session_state['retrieved_docs']
-        elif 'reranked_retrieved_docs' in st.session_state:
-            st.info("Reranked docs")
-            reranked_docs = st.session_state['reranked_retrieved_docs']
-        elif 'llm_provider' not in locals() or not llm_provider:
-            st.error("Please select an LLM provider.")
-
-        try:
-            # Prepare context from reranked documents
-            context_parts = []
-            for i, doc in enumerate(reranked_docs):
-                # Extract content from different document formats
-                if hasattr(doc, 'page_content'):
-                    content = doc.page_content
-                elif isinstance(doc, dict) and 'content' in doc:
-                    content = doc['content']
-                else:
-                    content = str(doc)
+    if reranked_docs is not None:
+        if st.button("Generate RAG Response", type='primary'):
+            try:
+                # Prepare context from reranked documents
+                context_parts = []
+                for i, doc in enumerate(reranked_docs):
+                    # Extract content from different document formats
+                    if hasattr(doc, 'page_content'):
+                        content = doc.page_content
+                    elif isinstance(doc, dict) and 'content' in doc:
+                        content = doc['content']
+                    else:
+                        content = str(doc)
+                    
+                    # Add document number and content to context
+                    context_parts.append(f"Document {i+1}:\n{content}\n")
                 
-                # Add document number and content to context
-                context_parts.append(f"Document {i+1}:\n{content}\n")
-            
-            # Combine all context
-            context = "\n".join(context_parts)
-            
-            print(llm_provider)
+                # Combine all context
+                context = "\n".join(context_parts)
+                
+                print(llm_provider)
 
-            # Generate response using backend function
-            with st.spinner("Generating RAG response..."):
-                rag_response = generate_rag_response(
-                    query=st.session_state.get("retrieval_dense_transformed_query", st.session_state.get("query", "")),
-                    context=context,
-                    llm_provider=llm_provider.lower(),
-                    llm_model_name=llm_model_name,
-                    prompt_template=prompt_template,
-                    temperature=model_temperature,
-                    max_tokens=model_max_tokens,
-                    top_p=model_top_p
-                )
-            
-            # save session state variables
-            st.session_state['rag_response'] = rag_response
-            st.session_state['rag_response_llm_provider'] = llm_provider
-            st.session_state['rag_response_llm_model_name'] = llm_model_name
-            st.session_state['rag_response_prompt_template'] = prompt_template
-            st.session_state['rag_response_model_temperature'] = model_temperature
-            st.session_state['rag_response_model_max_tokens'] = model_max_tokens
-            st.session_state['rag_response_model_top_p'] = model_top_p
-            
-        except Exception as e:
-            st.error(f"Error generating RAG response: {str(e)}")
+                # Generate response using backend function
+                with st.spinner("Generating RAG response..."):
+                    rag_response = generate_rag_response(
+                        query=st.session_state.get("retrieval_dense_transformed_query", st.session_state.get("query", "")),
+                        context=context,
+                        llm_provider=llm_provider.lower(),
+                        llm_model_name=llm_model_name,
+                        prompt_template=prompt_template,
+                        temperature=model_temperature,
+                        max_tokens=model_max_tokens,
+                        top_p=model_top_p
+                    )
+                
+                # save session state variables
+                st.session_state['rag_response'] = rag_response
+                st.session_state['rag_response_llm_provider'] = llm_provider
+                st.session_state['rag_response_llm_model_name'] = llm_model_name
+                st.session_state['rag_response_prompt_template'] = prompt_template
+                st.session_state['rag_response_model_temperature'] = model_temperature
+                st.session_state['rag_response_model_max_tokens'] = model_max_tokens
+                st.session_state['rag_response_model_top_p'] = model_top_p
+                
+            except Exception as e:
+                st.error(f"Error generating RAG response: {str(e)}")
 
     if 'rag_response' in st.session_state:
-        with st.expander("Generated Response", expanded=True):
+        with st.expander("RAG pipeline answer", expanded=True):
             st.success(st.session_state['rag_response'])
 
 def render_evaluation_section():

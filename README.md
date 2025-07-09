@@ -206,16 +206,6 @@ Describe the system design. Add a diagram if possible.
 ## Architecture
 The application follows a modular design with separate sections for each major component of the RAG pipeline. The UI is built with Streamlit for a clean, responsive interface.
 
-<!--
-You can add a diagram here using Mermaid or an image:
-
-
-  Data-->Indexing;
-  Indexing-->Retrieval;
-  Retrieval-->Generation;
-  Generation-->Evaluation;
-
--->
 
 <!--
 ====================
