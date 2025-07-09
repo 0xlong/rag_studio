@@ -371,7 +371,7 @@ def chunking_semantic(
             "default": "models/embedding-001",
             "options": [
                 "models/embedding-001",
-                "models/textembedding-gecko"
+                "models/text-embedding-004"
             ]
         }
     }
@@ -405,8 +405,8 @@ def chunking_semantic(
         # Map user-friendly model names to the required Google API format
         if embedding_model_name == "embedding-001":
             embedding_model_name = "models/embedding-001"
-        elif embedding_model_name == "textembedding-gecko":
-            embedding_model_name = "models/textembedding-gecko"
+        elif embedding_model_name == "text-embedding-004":
+            embedding_model_name = "models/text-embedding-004"
         # Now instantiate the Google embedding model with the correct name
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
         embeddings = GoogleGenerativeAIEmbeddings(
@@ -567,8 +567,8 @@ def embed_dense(
         # Map user-friendly model names to the required Google API format
         if model_name == "embedding-001":
             model_name = "models/embedding-001"
-        elif model_name == "textembedding-gecko":
-            model_name = "models/textembedding-gecko"
+        elif model_name == "text-embedding-004":
+            model_name = "models/text-embedding-004"
 
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
         base_embedder = GoogleGenerativeAIEmbeddings(
@@ -712,8 +712,8 @@ def add_to_vector_store(
     elif embedding_provider == "Google":
         if embedding_model_name == "embedding-001":
             embedding_model_name = "models/embedding-001"
-        elif embedding_model_name == "textembedding-gecko":
-            embedding_model_name = "models/textembedding-gecko"
+        elif embedding_model_name == "text-embedding-004":
+            embedding_model_name = "models/text-embedding-004"
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
         embedding_function = GoogleGenerativeAIEmbeddings(
             model=embedding_model_name,
@@ -854,7 +854,7 @@ def query_transform(query: str, mode: str) -> list:
 
     
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         google_api_key=google_api_key,
         temperature=0.7
     )
@@ -1024,10 +1024,19 @@ def retrieve_hybrid(
     """
     Hybrid retrieval: combine dense and sparse scores for each chunk.
     """
-    if not dense_chunks or not sparse_chunks:
-        raise ValueError("Dense or sparse chunks are empty. Please ensure both embeddings are created for the same set of chunks.")
+    # Input validation with detailed error messages
+    if not dense_chunks:
+        raise ValueError("Dense chunks are empty. Please create dense embeddings first.")
+    if not sparse_chunks:
+        raise ValueError("Sparse chunks are empty. Please create sparse embeddings first.")
     if len(dense_chunks) != len(sparse_chunks):
         raise ValueError(f"Mismatch: {len(dense_chunks)} dense chunks vs {len(sparse_chunks)} sparse chunks. Please use the same chunking file for both embeddings.")
+    
+    # Validate that chunks have the required embeddings
+    if 'embedding' not in dense_chunks[0]:
+        raise ValueError("Dense chunks do not contain 'embedding' field. Please create dense embeddings first.")
+    if 'embedding_sparse' not in sparse_chunks[0]:
+        raise ValueError("Sparse chunks do not contain 'embedding_sparse' field. Please create sparse embeddings first.")
 
     dim = len(dense_chunks[0]['embedding'])
 
@@ -1048,8 +1057,8 @@ def retrieve_hybrid(
     elif embedding_provider == "Google":
         if embedding_model_name == "embedding-001":
             embedding_model_name = "models/embedding-001"
-        elif embedding_model_name == "textembedding-gecko":
-            embedding_model_name = "models/textembedding-gecko"
+        elif embedding_model_name == "text-embedding-004":
+            embedding_model_name = "models/text-embedding-004"
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
         dense_model = GoogleGenerativeAIEmbeddings(
             model=embedding_model_name,
@@ -1059,57 +1068,69 @@ def retrieve_hybrid(
     else:
         raise ValueError(f"Unsupported provider: {embedding_provider}. Choose from 'OpenAI', 'Hugging Face', or 'Google'.")
 
-    # creating sparse model
-    if embedding_sparse_method == 'tfidf':
-        from sklearn.feature_extraction.text import TfidfVectorizer
-        sparse_vectorizer = TfidfVectorizer()
-        # Fit the vectorizer on all document contents
-        texts = [doc['content'] for doc in sparse_chunks]
-        sparse_vectorizer.fit(texts)
-        # Transform the query to a sparse vector
-        sparse_query_emb = sparse_vectorizer.transform([query])
-    elif embedding_sparse_method == 'bm25':
-        # BM25 needs tokenized input
-        from rank_bm25 import BM25Okapi
-        # Tokenize each chunk (simple whitespace split)
-        tokenized_docs = [doc['content'].lower().split() for doc in sparse_chunks]
-        sparse_vectorizer = BM25Okapi(tokenized_docs, k1=embedding_sparse_kparam, b=embedding_sparse_bparam)
-        # Tokenize the query for BM25 (BM25 expects a list of tokens)
-        tokenized_query = query.lower().split()
-        # Get BM25 scores for the query against all documents
-        bm25_scores = sparse_vectorizer.get_scores(tokenized_query)
-    else:
-        raise ValueError(f"Unsupported sparse embedding method: {embedding_sparse_method}")
-
     # 1. Compute dense embedding for query
     dense_query_emb = dense_model.embed_query(query)
 
-    # 2. Compute scores for each chunk
+    # 2. Compute sparse scores using the same approach as retrieve_sparse
+    sparse_scores = []
+    if embedding_sparse_method == 'tfidf':
+        # Use the same TF-IDF approach as retrieve_sparse
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        texts = [chunk['content'] for chunk in sparse_chunks]
+        # Fit a new TF-IDF vectorizer on the document texts
+        vectorizer = TfidfVectorizer()
+        X = vectorizer.fit_transform(texts)
+        # Transform the query into the same vector space
+        query_vec = vectorizer.transform([query]).toarray()[0]
+        # Compute dot product between query_vec and each doc's embedding
+        sparse_scores = [np.dot(query_vec, chunk['embedding_sparse']) for chunk in sparse_chunks]
+        
+    elif embedding_sparse_method == 'bm25':
+        # Use the same BM25 approach as retrieve_sparse
+        from rank_bm25 import BM25Okapi
+        # Tokenize each document (simple whitespace split)
+        tokenized_docs = [chunk['content'].split() for chunk in sparse_chunks]
+        # Initialize BM25 with user-specified k1 and b parameters
+        bm25 = BM25Okapi(tokenized_docs, k1=embedding_sparse_kparam, b=embedding_sparse_bparam)
+        # Tokenize the query
+        tokenized_query = query.split()
+        # Compute BM25 scores for the query against all documents
+        sparse_scores = bm25.get_scores(tokenized_query)
+    else:
+        raise ValueError(f"Unsupported sparse embedding method: {embedding_sparse_method}")
+
+    # 3. Compute scores for each chunk
     results = []
     for i, chunk in enumerate(dense_chunks):
         # Dense similarity (cosine)
         dense_emb = np.array(chunk['embedding'])
         dense_score = np.dot(dense_query_emb, dense_emb) / (np.linalg.norm(dense_query_emb) * np.linalg.norm(dense_emb) + 1e-10)
-        # Sparse similarity
-        if embedding_sparse_method == 'tfidf':
-            # For TF-IDF, use dot product between query and chunk sparse vectors
-            sparse_emb = np.array(sparse_chunks[i]['embedding_sparse'])
-            # The dot product gives a similarity score
-            sparse_score = sparse_query_emb.dot(sparse_emb)[0, 0] if sparse_query_emb.shape[1] == sparse_emb.shape[0] else 0
-        elif embedding_sparse_method == 'bm25':
-            # For BM25, use the precomputed BM25 score for this chunk
-            sparse_score = bm25_scores[i]
+        
+        # Get sparse score for this chunk
+        sparse_score = sparse_scores[i]
+        
+        # Normalize sparse score to 0-1 range for fair combination with dense score
+        # This is important because sparse and dense scores can have very different scales
+        if len(sparse_scores) > 1:
+            sparse_score_normalized = (sparse_score - min(sparse_scores)) / (max(sparse_scores) - min(sparse_scores) + 1e-10)
         else:
-            sparse_score = 0
+            sparse_score_normalized = sparse_score
+        
         # Combine dense and sparse scores using alpha
-        final_score = alpha * dense_score + (1 - alpha) * sparse_score
+        final_score = alpha * dense_score + (1 - alpha) * sparse_score_normalized
         results.append((final_score, chunk))
 
-    # 3. Sort and return top-k
+    # 4. Sort and return top-k
     results.sort(reverse=True, key=lambda x: x[0])
     return [chunk for score, chunk in results[:top_k]]
 
-def retrieve_sparse(query: str, sparse_chunks: list, top_k: int = 3, embedding_sparse_method: str = 'tfidf', bm25_k1: float = 1.5, bm25_b: float = 0.75) -> list:
+def retrieve_sparse(
+        query: str, 
+        sparse_chunks: list, 
+        top_k: int = 3, 
+        embedding_sparse_method: str = 'tfidf', 
+        bm25_k1: float = 1.5, 
+        bm25_b: float = 0.75) -> list:
     """
     Retrieve the most relevant documents using sparse embeddings (BM25 or TF-IDF).
     Args:
@@ -1140,6 +1161,7 @@ def retrieve_sparse(query: str, sparse_chunks: list, top_k: int = 3, embedding_s
         query_vec = vectorizer.transform([query]).toarray()[0]
         # Compute dot product between query_vec and each doc's embedding
         scores = [np.dot(query_vec, chunk['embedding_sparse']) for chunk in sparse_chunks]
+
     elif embedding_sparse_method.lower() == 'bm25':
         # --- BM25 retrieval logic ---
         from rank_bm25 import BM25Okapi
@@ -1151,6 +1173,7 @@ def retrieve_sparse(query: str, sparse_chunks: list, top_k: int = 3, embedding_s
         tokenized_query = query.split()
         # Compute BM25 scores for the query against all documents
         scores = bm25.get_scores(tokenized_query)
+
     else:
         # If an unsupported method is provided, raise an error
         raise ValueError(f"Unsupported sparse embedding method: {embedding_sparse_method}. Use 'tfidf' or 'bm25'.")
@@ -1160,7 +1183,6 @@ def retrieve_sparse(query: str, sparse_chunks: list, top_k: int = 3, embedding_s
     # Return the top-k most relevant chunks
     results = [sparse_chunks[i] for i in top_indices]
     return results
-
 
 def rerank_cross_encoder(
     query: str,
@@ -1235,7 +1257,6 @@ def rerank_cross_encoder(
         return reranked_docs[:top_k]
     
     return reranked_docs
-
 
 def rerank_google_vertexai(
     documents: list,
@@ -1488,16 +1509,19 @@ def generate_rag_response(
     if prompt_template is None:
         prompt_template = """Context: {context}
 
-Question: {question}
+                            Question: {question}
 
-Please provide a comprehensive answer based on the context provided above. If the context doesn't contain enough information to answer the question, please say so.
+                            Please provide a comprehensive answer based on the context provided above. If the context doesn't contain enough information to answer the question, please say so.
 
-Answer:"""
+                            Answer:"""
     
     # Create the prompt using the template
     prompt = prompt_template.format(context=context, question=query)
     
+    
     # Initialize the appropriate LLM based on provider
+    llm_provider = llm_provider.lower()
+
     if llm_provider == "openai":
         from langchain_openai import ChatOpenAI
         llm = ChatOpenAI(
@@ -1548,7 +1572,7 @@ def make_ragas_evaluationset(
     questions_number: int,
 ) -> str:
     """
-    Create evaluation set for RAGAS by first extracting context and ground truth n times per document, then generating a question and answer for each pair.
+    Create evaluation set for RAGAS by first extracting context and ground truth n times per document, then generating a question and ground truth for each pair.
     This function is designed to help you understand how to build a robust evaluation set for RAG systems.
     
     Args:
@@ -1558,9 +1582,9 @@ def make_ragas_evaluationset(
         List of evaluation items (dicts with question, answer, contexts, ground_truths)
     """
     from langchain.schema import HumanMessage
-    # Initialize the LLM (Gemini 2.0 Flash)
+
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model="gemini-2.0-flash",
         google_api_key=st.secrets["api_keys"].get('google_api_key'),
         temperature=0.3
     )
@@ -1569,9 +1593,10 @@ def make_ragas_evaluationset(
     eval_template = PromptTemplate(
         input_variables=["context","num_samples"],
         template="""From the following document, extract self-contained passage (context) and its ground truth (the key fact or answer it contains). Then generate question relevant for the context and ground truth and relevant answer.\n\n
-                    Document:\n{context}\n\n
+                    Document:\n
+                    {context}\n
                     Return in this format, no additional text:\n
-                    Context: <the passage>\n
+                    Context: <the context based on which we create groiund truth, question and answer>\n
                     Ground truth: <the key fact or answer>\n
                     Question: <question created based on context>\n
                     Answer: <answer created based on question and context and ground truth>\n"""
@@ -1608,6 +1633,7 @@ def make_ragas_evaluationset(
             response = llm.invoke([HumanMessage(content=eval_prompt)])
             response_text = response.content.strip()
 
+
             # Parse context and ground truth from the response
             # Expecting lines: Context: ...\nGround truth: ...
             context = ""
@@ -1615,49 +1641,305 @@ def make_ragas_evaluationset(
             question = ""
             answer = ""
             for line in response_text.split('\n'):
+
                 if line.lower().startswith("context:"):
                     context = line[len("Context:"):].strip()
-
+                    #print("CONTEXT:", context,"\n\n")
                 elif line.lower().startswith("ground truth:"):
-                    ground_truth = line[len("Ground truth:"):].strip()
-
+                    ground_truth =   line[len("Ground truth:"):].strip()
+                    #print("TRUTH:",ground_truth,"\n\n")
                 elif line.lower().startswith("question:"):
                     question = line[len("question:"):].strip()
-
+                    #print("QUESTION:",question,"\n\n")
                 elif line.lower().startswith("answer:"):
                     answer = line[len("Answer:"):].strip()
+                    #print("ANSWER:",answer,"\n\n")
 
-            if not context or not ground_truth or not question or not answer:
-                print(f"Failed to parse context/ground truth for document {title}")
-                continue
+            if not context:
+                print(f"Failed to parse context for document {title}")     
+            elif not ground_truth:
+                print(f"Failed to parse ground truth for document {title}")      
+            elif not question: 
+                print(f"Failed to parse question for document {title}")
+            elif not answer:
+                print(f"Failed to parse answer for document {title}")
             
-            # Check for duplicate or empty question
-            if not question or question in unique_questions:
-                print("Duplicate or empty question found, retrying...")
+            # Check for empty question
+            if not question:
+                print("Empty question found, retrying...")
+                continue
+
+            # Check for duplicated question
+            if question in unique_questions:
+                print("Duplicate question found, retrying...")
                 continue
 
             # 4. Add to evaluation set
             eval_item = {
-                "question": [question],
-                "answer": [answer],
+                "question": question,
+                "answer": answer,
                 "contexts": [context],
-                "ground_truths": [ground_truth]
+                "ground_truth": ground_truth
             }
+
             evaluation_set.append(eval_item)
             unique_questions.add(question)
             question_counter += 1
             print(f"Generated sample {question_counter} (from document: {title})")
 
         except Exception as e:
-            print(f"Error generating sample for document {title}: {str(e)}")
-            continue
+            print("Error: ",e)
 
     # Save the evaluation set to file
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_path = f"data/evaluation/ragas_eval_set2_{timestamp}.json"
+    output_path = f"data/evaluation/synthetics_sets/ragas_eval_dataset_{timestamp}.json"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(evaluation_set, f, ensure_ascii=False, indent=2)
-    print(f"Generated {len(evaluation_set)} evaluation samples")
-    print(f"Evaluation set saved to: {output_path}")
+    print(f"Evaluation SYNTHETIC DATASET saved to: {output_path}")
+
     return evaluation_set
+
+def evaluate_rag_pipeline(evaluation_dataset):
+    """
+    Evaluate a RAG pipeline using RAGAS framework.
+    
+    This function takes an evaluation dataset with RAG pipeline input and runs comprehensive evaluation metrics
+    including faithfulness, answer relevancy, context precision, answer correctness, and context recall.
+    
+    Args:
+        evaluation_dataset: List of dicts with 'question', 'answer', 'contexts', 'ground_truth'
+        
+    Returns:
+        dict: Evaluation results from RAGAS
+    """
+    from ragas import evaluate
+    from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall, answer_correctness
+    from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+    from datasets import Dataset
+    from ragas.llms import LangchainLLMWrapper
+    import pandas as pd
+    import json
+    from datetime import datetime
+    import os
+    
+    # Convert evaluation dataset to pandas DataFrame
+    df = pd.DataFrame(evaluation_dataset)
+    dataset_for_evaluation = Dataset.from_pandas(df)
+    
+    try:
+        print("Starting RAG evaluation on given evaluation dataset.")
+
+        # Evaluate using RAGAS
+        evaluation_result = evaluate(
+
+            dataset=dataset_for_evaluation,
+            
+            metrics=[faithfulness, answer_relevancy, context_precision, answer_correctness, context_recall],
+            
+            llm=LangchainLLMWrapper(ChatGoogleGenerativeAI(
+                model='gemini-2.0-flash',
+                google_api_key=st.secrets["api_keys"].get("google_api_key"),
+                temperature=0.3,
+                max_output_tokens=1000,
+                top_p=0.90,
+                timeout=120
+            )),
+            
+            embeddings=GoogleGenerativeAIEmbeddings(
+                model='models/embedding-001',
+                google_api_key=st.secrets["api_keys"].get("google_api_key")
+            )
+        )
+        
+        # Save the evaluation result to file
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_path = f"data/evaluation/results/ragas_evaluation_results_{timestamp}.json"
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Convert result to pandas DataFrame and save as JSON
+        result_df = evaluation_result.to_pandas()
+        result_dict = result_df.to_dict('records')
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(result_dict, f, ensure_ascii=False, indent=2)
+        
+        print(f"RAG evaluation RESULT saved to: {output_path}")
+        
+        return evaluation_result
+        
+    except Exception as e:
+        print(f"Error during evaluation: {str(e)}")
+        raise Exception(f"Evaluation failed: {str(e)}")
+
+def make_eval_dataset_and_results(
+    evaluation_set,
+    retrieval_type,
+    embedding_provider=None, 
+    embedding_model_name=None,  
+    vector_store=None,
+    embedded_documents_sparse=None,
+    embedded_documents=None,
+    retrieval_dense_top_k=None,
+    retrieval_dense_mmr_fetch_k=None,
+    retrieval_dense_mmr_lambda_mult=None,
+    retrieval_dense_keywords=None,
+    retrieval_dense_search_type=None,
+    retrieval_sparse_top_k=None,
+    embedding_sparse_method=None,
+    embedding_sparse_kparam=None,
+    embedding_sparse_bparam=None,
+    retrieval_hybrid_alpha=None,
+    retrieval_hybrid_top_k=None,
+    reranked_type=None,
+    reranked_type_model=None,
+    reranked_type_provider=None,
+    reranked_top_k_rerank=None,
+    rag_response_llm_provider=None,
+    rag_response_llm_model_name=None,
+    rag_response_prompt_template=None,
+    rag_response_model_temperature=None,
+    rag_response_model_max_tokens=None,
+    rag_response_model_top_p=None
+):
+    """
+    Create an evaluation dataset with RAG answers for each item in the evaluation set.
+    This function encapsulates the logic from the Streamlit button block, making it reusable and testable.
+    Args:
+        evaluation_set: List of dicts with 'question', 'answer', 'contexts', 'ground_truth'.
+        All other arguments: session state variables needed for retrieval, reranking, and generation.
+    Returns:
+        eval_dataset: List of dicts in RAGAS-compatible format.
+        evaluation_results: List of dicts from evluation set and RAGAS metrics associated.
+    """
+    eval_dataset = []  # This will store the final evaluation dataset
+
+    # Loop through each item in the evaluation set
+    for item in evaluation_set:
+
+        # extract query from evaluation dataset - "question" key
+        evaluation_query = item['question']
+        print("QUERY: ",evaluation_query)
+
+        # creating RAG response with all steps - retrieval -> reranking (if used) -> context -> rag response
+        try:
+            # --- Retrieval step ---
+            if retrieval_type == 'dense':
+                print("Retrieval type: DENSE")
+                evaluation_retrieved_docs = retrieve_dense(
+                    query=evaluation_query,
+                    vector_store=vector_store,
+                    top_k=retrieval_dense_top_k,
+                    fetch_k=retrieval_dense_mmr_fetch_k,
+                    lambda_mult=retrieval_dense_mmr_lambda_mult,
+                    keywords=retrieval_dense_keywords,
+                    search_type=retrieval_dense_search_type
+                )
+                
+            elif retrieval_type == 'sparse':
+                print("Retrieval type: SPARSE")
+                evaluation_retrieved_docs = retrieve_sparse(
+                    query=evaluation_query,
+                    sparse_chunks=embedded_documents_sparse or [],
+                    top_k=retrieval_sparse_top_k,
+                    embedding_sparse_method=embedding_sparse_method,
+                    bm25_k1=embedding_sparse_kparam,
+                    bm25_b=embedding_sparse_bparam
+                )
+
+            elif retrieval_type == 'hybrid':
+                print("Retrieval type: HYBRID")
+                evaluation_retrieved_docs = retrieve_hybrid(
+                    query=evaluation_query,
+                    embedding_provider=embedding_provider,  # You can add as needed
+                    embedding_model_name=embedding_model_name,  # You can add as needed
+                    embedding_sparse_method=embedding_sparse_method,
+                    embedding_sparse_kparam=embedding_sparse_kparam,
+                    embedding_sparse_bparam=embedding_sparse_bparam,
+                    dense_chunks=embedded_documents or [],
+                    sparse_chunks=embedded_documents_sparse or [],
+                    alpha=retrieval_hybrid_alpha,
+                    top_k=retrieval_hybrid_top_k
+                )
+                
+            else:
+                print('Retrieval type not chosen')
+
+            # --- Reranking step ---
+            if reranked_type == 'cross_encoder':
+                print("reranked_type: cross_encoder")
+                evaluation_reranked_docs = rerank_cross_encoder(
+                    evaluation_query,
+                    evaluation_retrieved_docs,
+                    model_name=reranked_type_model,
+                    top_k=reranked_top_k_rerank
+                )
+            elif reranked_type == 'llm':
+                print("reranked_type: llm")
+                evaluation_reranked_docs = rerank_llm_judge(
+                    query=evaluation_query,
+                    documents=evaluation_retrieved_docs,
+                    llm_provider=reranked_type_provider,
+                    llm_model_name=reranked_type_model,
+                    top_k=reranked_top_k_rerank
+                )
+                
+            else:
+                evaluation_reranked_docs = evaluation_retrieved_docs  # No reranking
+
+            # --- Prepare context from reranked documents ---
+            context_parts = []
+            for i, doc in enumerate(evaluation_reranked_docs):
+                # Handle different document formats (LangChain Document, dict, or str)
+                if hasattr(doc, 'page_content'):
+                    content = doc.page_content
+                elif isinstance(doc, dict) and 'content' in doc:
+                    content = doc['content']
+                else:
+                    content = str(doc)
+                context_parts.append(f"Document {i+1}:\n{content}\n")
+            evaluation_context = "\n".join(context_parts)
+            print("Building context: DONE")
+
+            # --- Generate RAG answer ---
+            evaluation_rag_response = generate_rag_response(
+                query=evaluation_query,
+                context=evaluation_context,
+                llm_provider=rag_response_llm_provider,
+                llm_model_name=rag_response_llm_model_name,
+                prompt_template=rag_response_prompt_template,
+                temperature=rag_response_model_temperature,
+                max_tokens=rag_response_model_max_tokens,
+                top_p=rag_response_model_top_p
+            )
+            print("Generation RAG response: DONE")
+
+            # --- Build the evaluation item in RAGAS-compatible format ---
+            question = item["question"]
+            ground_truth = item["ground_truth"]
+            context = evaluation_context
+            answer = evaluation_rag_response
+            eval_dataset.append({
+                "question": question if isinstance(question, list) else question,
+                "answer": answer if isinstance(answer, list) else answer,
+                "contexts": context if isinstance(context, list) else [context],
+                "ground_truth": ground_truth if isinstance(ground_truth, list) else ground_truth
+            })
+            print("Evaluation dataset with RAG answers: DONE")
+
+        except Exception as e:
+            # If any error occurs, skip this item and continue
+            print(f"Error generating question: {str(e)}")
+    
+    # Save the evaluation set to file
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    output_path = f"data/evaluation/evaluation_sets/ragas_eval_dataset_with_RAG_{timestamp}.json"
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(eval_dataset, f, ensure_ascii=False, indent=2)
+    print(f"Evaluation DATASET WITH RAG saved to: {output_path}")
+
+    # Run RAGAS evaluation
+    evaluation_results = evaluate_rag_pipeline(eval_dataset)
+
+    return [eval_dataset,evaluation_results]

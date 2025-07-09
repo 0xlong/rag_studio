@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import tempfile
 import os
-from backend import load_document, chunking_fixed_size, chunking_recursive, chunking_by_doc_type, chunking_sentence_window, chunking_semantic, chunking_propositions, embed_dense, embed_sparse, add_to_vector_store, query_transform, retrieve_dense, retrieve_hybrid, retrieve_sparse, rerank_cross_encoder, rerank_llm_judge, generate_rag_response, make_ragas_evaluationset
+from backend import load_document, chunking_fixed_size, chunking_recursive, chunking_by_doc_type, chunking_sentence_window, chunking_semantic, chunking_propositions, embed_dense, embed_sparse, add_to_vector_store, query_transform, retrieve_dense, retrieve_hybrid, retrieve_sparse, rerank_cross_encoder, rerank_llm_judge, generate_rag_response, make_ragas_evaluationset, make_eval_dataset_and_results
 from data_info import chunking_strategies_comparison_df, get_proposition_prompt_text, VECTOR_STORES_COMPARISON, RERANKING_TECHNIQUES_COMPARISON, RETRIEVAL_TECHNIQUES_COMPARISON
 import json
 from langchain_community.vectorstores import Chroma, FAISS
@@ -95,8 +95,8 @@ with st.sidebar:
     selected = option_menu(
         menu_title=None,
         options=["Data", "Chunking", "Embeddings", "Vector Stores", "Retrieval", 
-                "Reranking", "Prompting", "Generation", "Evaluation"],
-        icons=['📂', '✂️', '🔤', '🗂️', '🔍', '📊', '💭', '🤖', '📈'],
+                "Reranking", "Generation", "Evaluation"],
+        icons=['📂', '✂️', '🔤', '🗂️', '🔍', '📊', '🤖', '📈'],
         menu_icon="",
         default_index=0,
         styles={
@@ -779,11 +779,12 @@ def render_embeddings_section():
                     st.session_state['embedding_sparse_kparam'] = k1
                     st.session_state['embedding_sparse_bparam'] = b
 
-            # Save the method in session_state for later use
-            st.session_state['embedding_sparse_method'] = sparse_model.lower().replace("-", "_")
-
             # --- SPARSE EMBEDDING BUTTON AND LOGIC ---
             if st.button("Embed (Sparse)", type='primary', key="embed_sparse"):
+                
+                # Save the method in session_state for later use
+                st.session_state['embedding_sparse_method'] = sparse_model.lower().replace("-", "")
+
                 # 1. Check if chunked documents exist in session state
                 if 'chunked_documents' not in st.session_state or not st.session_state.chunked_documents:
                     st.warning("Please chunk your documents first (see the Chunking section) or use chunked files.")
@@ -800,7 +801,7 @@ def render_embeddings_section():
                                 # Pass k1 and b from UI to backend for BM25
                                 embedded_docs = embed_sparse(
                                     chunked_docs,
-                                    method=method,
+                                    method=st.session_state['embedding_sparse_method'],
                                     k1=st.session_state.get('embedding_sparse_kparam', 1.5),
                                     b=st.session_state.get('embedding_sparse_bparam', 0.75)
                                 )
@@ -874,7 +875,6 @@ def render_vector_stores_section():
     # Select vector store
     with st.expander("Vector Stores Selection", expanded=False):
 
-        
         vector_store = st.segmented_control(
 
             "Select vector store",
@@ -946,7 +946,7 @@ def render_vector_stores_section():
         
 
     # --- VECTOR STORE CREATION BUTTON ---
-    if st.button("Create Vector Store", type='primary', key="create_vector_store") and vector_store:
+    if st.button("Create Vector Store", type='primary', key="create_vector_store"):
         
         # It prepares a configuration dictionary for the selected vector store and calls the backend function.
         vector_store_config = {}
@@ -971,7 +971,7 @@ def render_vector_stores_section():
 
             # A spinner is shown to the user to indicate that a process is running.
             with st.spinner(f"Creating {vector_store} vector store..."):
-               
+            
                 # 3. Retrieve the embedded documents from the session state.
                 embedded_docs = st.session_state.embedded_documents
                 
@@ -999,10 +999,11 @@ def render_vector_stores_section():
                                                                                 "k": 1,  # Number of top documents to retrieve
                                                                                 "score_threshold": 0.0,  # Minimum similarity score to return a result
                                                                                 "where_document": {"$or": [{"$contains": "kpathsea"}, # keywords to filter on
-                                                                                                           {"$contains": "xxxsandra"}]
+                                                                                                        {"$contains": "xxxsandra"}]
                                                                                                     } 
                                                                             })
-                    st.write(retriever.invoke("which car?"))
+                    # check if retriever works
+                    #st.write(retriever.invoke("which car?"))
         else:
             # If no embedded documents are found, a warning is shown to the user.
             st.warning("Please embed your documents first in the Embeddings section.")
@@ -1013,24 +1014,11 @@ def render_retrieval_section():
     with st.expander("State vars:", expanded=False):
         st.write(dict(st.session_state))
 
-    # --- Vector Store Type Check ---
-    vector_store = st.session_state.get('vector_store', None)
-    if vector_store is not None:
-        if isinstance(vector_store, Chroma):
-            st.info("Current vector store: Chroma ")
-        elif isinstance(vector_store, FAISS):
-            st.info("Current vector store: FAISS")
-        else:
-            st.info(f"Current vector store: {type(vector_store).__name__} (unknown type)")
-    else:
-        st.info("No vector store loaded in session state.")
-
     # Query input field for user to type their search query
     query = st.text_input(
         "Search in document",
         help="This is the text used to find the most relevant chunks."
     )
-    
     # Store query in session state for use in other sections
     if query:
         st.session_state['query'] = query
@@ -1053,7 +1041,6 @@ def render_retrieval_section():
             help="Choose how to retrieve documents: Dense (semantic), Sparse (keyword), or Hybrid (both).")
 
         if retrieval_type == "Sparse":
-            alpha = 1
             menu_sparse_retrieval = True
 
         elif retrieval_type == "Dense":
@@ -1099,18 +1086,18 @@ def render_retrieval_section():
                         transformed_query = query_transform(query, mode=query_transformation_type)
 
                         # Store the transformed query in session state so it can be accessed later
-                        st.session_state['query'] = transformed_query
+                        st.session_state['retrieval_dense_transformed_query'] = transformed_query[0]
             
             with col2:
                 if 'query' in st.session_state:
                     if query:
                         st.markdown("##### Transformed Query")
-                        st.info(st.session_state['query'][0])
+                        st.info(st.session_state.get('retrieval_dense_transformed_query', query))
         
         with st.expander("Search type"):
             dense_search_type = st.segmented_control(
                     "Search Type for dense retrieval",
-                    ["Similarity score","Maximum Marginal Relevance (MMR)"],
+                    ["Similarity score", "Maximum Marginal Relevance (MMR)"],
                     label_visibility="collapsed",
                     help=("(MMR (Maximum Marginal Relevance): Balances relevance and diversity by selecting documents similar to the query but dissimilar to each other, reducing redundancy. Ideal for varied, relevant results. Similarity Score: Ranks documents by cosine similarity to the query, prioritizing the most similar items for precise, focused searches.)"
                           )
@@ -1133,6 +1120,10 @@ def render_retrieval_section():
                 help="Documents with a similarity score below this threshold will be filtered out. Higher values mean stricter filtering.",
                 label_visibility='visible'
                 )
+                
+            # Initialize MMR parameters with default values for similarity search
+            st.session_state['retrieval_dense_mmr_fetch_k'] = 20
+            st.session_state['retrieval_dense_mmr_lambda_mult'] = 0.5
 
         elif dense_search_type == 'Maximum Marginal Relevance (MMR)':
 
@@ -1141,7 +1132,7 @@ def render_retrieval_section():
             # Number of candidates to fetch before reranking
             with st.expander("Fetch-K (candidates for MMR)"):
                 fetch_k = st.slider("Number of candidates to fetch", 5, 100, 20)
-                st.session_state['fetch_k'] = fetch_k
+                st.session_state['retrieval_dense_mmr_fetch_k'] = fetch_k
 
             # Lambda multiplier for diversity vs relevance
             with st.expander("Lambda (diversity vs relevance)"):
@@ -1149,12 +1140,14 @@ def render_retrieval_section():
                     "Lambda (0 = more diverse, 1 = more relevant)",
                     min_value=0.0, max_value=1.0, value=0.5, step=0.01
                 )
-                st.session_state['lambda_mult'] = lambda_mult
+                st.session_state['retrieval_dense_mmr_lambda_mult'] = lambda_mult
+        
+
 
         # Top k documents to retrieve
         with st.expander("Top-K documents"):
-            top_k = st.slider("", 1, 20, 3)
-            st.session_state['top_k'] = top_k
+            top_k = st.slider("", 1, 20, 10)
+            st.session_state['retrieval_dense_top_k'] = top_k
 
         with st.expander("keywords to filter documents (comma-separated), provide at least 2"):
             # Let the user enter keywords separated by commas
@@ -1164,6 +1157,17 @@ def render_retrieval_section():
             )
             # Convert the input string to a list of keywords, removing whitespace
             keywords = [kw.strip() for kw in keyword_input.split(",") if kw.strip()]
+            st.session_state['retrieval_dense_keywords'] = keywords
+            
+        # Initialize all session state variables with default values if they don't exist
+        if 'retrieval_dense_mmr_fetch_k' not in st.session_state:
+            st.session_state['retrieval_dense_mmr_fetch_k'] = 20
+        if 'retrieval_dense_mmr_lambda_mult' not in st.session_state:
+            st.session_state['retrieval_dense_mmr_lambda_mult'] = 0.5
+        if 'retrieval_dense_keywords' not in st.session_state:
+            st.session_state['retrieval_dense_keywords'] = []
+
+
 
         if st.button("Retrieve (dense)", type='primary'):
 
@@ -1175,19 +1179,23 @@ def render_retrieval_section():
             elif not query:
                 st.warning("Please enter a query to retrieve documents.")
 
+            elif not dense_search_type:
+                st.warning("Please enter a query to retrieve documents.")
+
             # if vector store and query exist
             else:
-
                 # Use the transformed query if it exists in session state, otherwise use the original query.
-                query_for_retrieval = st.session_state.get("query")[0]
+                query_for_retrieval = st.session_state.get("retrieval_dense_transformed_query", query)
+                st.info(query_for_retrieval)
 
                 with st.spinner("Retrieving relevant documents..."):
                     try:
                         
-                        # we have to assign none values for params for mmr (cause we choose similarity score), otherwise we cannot run retrieve_dense
-                        if search_type_chosen =='similarity_score_threshold':
-                            fetch_k = 0
-                            lambda_mult = 0
+                        # Get parameters with safe defaults
+                        fetch_k = st.session_state.get('retrieval_dense_mmr_fetch_k', 20)
+                        lambda_mult = st.session_state.get('retrieval_dense_mmr_lambda_mult', 0.5)
+                        keywords = st.session_state.get('retrieval_dense_keywords', [])
+                        top_k = st.session_state.get('retrieval_dense_top_k', 10)
 
                         # retrieve documents from vector store related to query with given params
                         retrieved_docs = retrieve_dense(
@@ -1199,6 +1207,8 @@ def render_retrieval_section():
                             keywords=keywords,
                             search_type=search_type_chosen
                         )
+
+                        st.session_state['retrieval_dense_search_type'] = search_type_chosen
                         
                         # Show results in the expander
                         with st.expander("Retrieved Documents", expanded=True):
@@ -1207,12 +1217,12 @@ def render_retrieval_section():
                             if retrieved_docs:
                                 st.write("Retrieved results:", retrieved_docs)
                                 st.session_state['retrieved_docs'] = retrieved_docs
+                                st.session_state['retrieval_type'] = 'dense'
                             else:
                                 st.info("No documents found above the threshold. (TIP: Lower the threshold to include more results.)")
                             
                     except Exception as e:
                         st.error(f"Error during retrieval: {e}")
-
 
     elif menu_hybrid:
 
@@ -1220,7 +1230,7 @@ def render_retrieval_section():
             alpha = st.slider("Choose weights - 1-dense scores more important; 0-sparse scores more important", 0.0, 1.0, 0.5)
 
         with st.expander("How many docs to retrieve"):
-            top_k = st.slider("", 0, 20, 1)
+            top_k = st.slider("", 0, 20, 10)
         
         # get documents with dense and sparse embeddings (if exist)
         dense_chunks = st.session_state.get('embedded_documents', [])
@@ -1234,8 +1244,8 @@ def render_retrieval_section():
         embedding_sparse_method = st.session_state.get('embedding_sparse_method')
         embedding_sparse_kparam = st.session_state.get('embedding_sparse_kparam', 1.5)
         embedding_sparse_bparam = st.session_state.get('embedding_sparse_bparam', 0.75)
-        
-        if st.button("Hybrid"):
+
+        if st.button("Retrieve (Hybrid)"):
             with st.spinner("Retrieving relevant documents (hybrid)..."):
                 try:
                     retrieved_docs_hybrid = retrieve_hybrid(
@@ -1250,12 +1260,19 @@ def render_retrieval_section():
                         alpha=alpha,
                         top_k=top_k
                     )
-                    st.session_state['retrieved_docs_hybrid'] = retrieved_docs_hybrid
-                    if st.session_state['retrieved_docs_hybrid']:
-                        st.write("Retrieved results:", st.session_state['retrieved_docs_hybrid'])
+
+                    # save session state variables
+                    st.session_state['retrieved_docs'] = retrieved_docs_hybrid
+                    st.session_state['retrieval_type'] = 'hybrid'
+                    st.session_state['retrieval_hybrid_alpha'] = alpha
+                    st.session_state['retrieval_hybrid_top_k'] = top_k
+
+                    # display results
+                    if 'retrieved_docs' in st.session_state:
+                        st.write("Retrieved results:", st.session_state['retrieved_docs'])
                     else:
                         st.info("No documents found above the threshold.")
-
+                    
                 except Exception as e:
                     st.error(f"Error during hybrid retrieval: {e}")
  
@@ -1264,7 +1281,7 @@ def render_retrieval_section():
         # display info about sparse params chosen in embedding section if any
         if st.session_state.get('embedding_sparse_method') == 'bm25':
             st.info(f"Sparse method chosen in Embeddings section: {st.session_state.get('embedding_sparse_method')} - (kparam: {st.session_state.get('embedding_sparse_kparam')}, bparam: {st.session_state.get('embedding_sparse_bparam')})")
-        elif st.session_state.get('embedding_sparse_method') == 'tf_idf':
+        elif st.session_state.get('embedding_sparse_method') == 'tfidf':
             st.info(f"Sparse method chosen in Embeddings section: {st.session_state.get('embedding_sparse_method')}")
         else:
             st.info(f"Sparse params NOT chosen in Embeddings section. Choose below.")
@@ -1319,7 +1336,7 @@ def render_retrieval_section():
             # save sparse_model selection in streamlit session state
             if sparse_model:
                 st.session_state["embedding_sparse_method"] = sparse_model.lower().replace("-", "")
-                
+
                 with st.expander("Sparse Model Parameters", expanded=False):
 
                     # Show only the parameters relevant to the selected model
@@ -1348,12 +1365,11 @@ def render_retrieval_section():
                         # save sparse model param in streamlit session state
                         st.session_state['embedding_sparse_kparam'] = k1
                         st.session_state['embedding_sparse_bparam'] = b
+                        
             
         # no of docs to retrieve
         with st.expander("Top-K documents (sparse)"):
-            sparse_top_k = st.slider("", 1, 20, 3)
-            st.write(sparse_top_k)
-            st.session_state['sparse_top_k'] = sparse_top_k
+            sparse_top_k = st.slider("", 1, 20, 10)
 
         # Button to trigger sparse retrieval
         if st.button("Retrieve (Sparse)", key="retrieve_sparse"):
@@ -1364,13 +1380,19 @@ def render_retrieval_section():
                     query,
                     sparse_chunks,
                     top_k=sparse_top_k,
-                    embedding_sparse_method=st.session_state.get('embedding_sparse_method')
+                    embedding_sparse_method=st.session_state.get('embedding_sparse_method'),
+                    bm25_k1 = st.session_state['embedding_sparse_kparam'],
+                    bm25_b = st.session_state['embedding_sparse_bparam']
                 )
                 if results:
+
+                    # assign session state variables
+                    st.session_state['retrieval_type'] = 'sparse'
+                    st.session_state['retrieval_sparse_top_k'] = sparse_top_k
+
+                    # display results
                     with st.expander("Retrieved Documents", expanded=True):
-                        for i, doc in enumerate(results):
-                            st.write(f"Result {i+1}:")
-                            st.write(doc['content'])
+                        st.write(results)
                 else:
                     st.info("No documents found for your query.")
     else:
@@ -1408,6 +1430,7 @@ def render_reranking_section():
                 value=5,
                 help="Number of top documents to return after reranking. Higher values may include less relevant documents."
             )
+
         elif reranker == "LLM-as-a-judge":
             # LLM-as-a-judge reranking parameters
             llm_provider = st.selectbox(
@@ -1432,6 +1455,7 @@ def render_reranking_section():
                 value=5,
                 help="Number of top documents to return after reranking. Higher values may include less relevant documents."
             )
+            st.session_state['reranked_top_k_rerank'] = top_k_rerank
         
     if st.button("Rerank", key="rerank_crossencoder"):
 
@@ -1443,6 +1467,8 @@ def render_reranking_section():
                                                                     top_k=top_k_rerank
                                                                     )
                 st.session_state['reranked_retrieved_docs'] = reranked_docs_crossencoder
+                st.session_state['reranked_type'] = 'cross_encoder'
+                st.session_state['reranked_type_model'] = reranker_model
                 st.success("Reranking completed successfully!")
             else:
                 st.warning("Please perform a retrieval first to get documents to rerank.")
@@ -1462,10 +1488,15 @@ def render_reranking_section():
 
                 # Save reranked docs in session state for display
                 st.session_state['reranked_retrieved_docs'] = reranked_docs_llm_judge
+                st.session_state['reranked_type'] = 'llm'
+                st.session_state['reranked_type_provider'] = llm_provider
+                st.session_state['reranked_type_model'] = llm_model_name
                 st.success("LLM-as-a-judge reranking completed successfully!")
             else:
                 st.warning("Please perform a retrieval first to get documents to rerank.")
                 reranked_docs_llm_judge = None
+
+        st.session_state['reranked_top_k_rerank'] = top_k_rerank
 
         # show reranked docs and original docs side by side
         with st.expander("Comparison: Original vs Reranked Documents", expanded=True):
@@ -1494,9 +1525,28 @@ def render_reranking_section():
             with col_2:
                 st.markdown("#### Reranked Documents")
                 if 'reranked_retrieved_docs' in st.session_state and st.session_state['reranked_retrieved_docs']:
+                    # Get the original docs for position lookup
+                    original_docs = st.session_state.get('retrieved_docs', [])
                     for i, doc in enumerate(st.session_state['reranked_retrieved_docs']):
                         st.write("---")
-                        st.markdown(f"**Document {i+1}:**")
+                        # Try to find the old index (position in original_docs)
+                        try:
+                            # Compare by object identity first, fallback to content if needed
+                            if doc in original_docs:
+                                old_index = original_docs.index(doc)
+                            else:
+                                # Fallback: compare by content if not the same object
+                                doc_content = doc.page_content if hasattr(doc, 'page_content') else (doc['content'] if isinstance(doc, dict) and 'content' in doc else str(doc))
+                                old_index = next((j for j, orig_doc in enumerate(original_docs)
+                                                 if (getattr(orig_doc, 'page_content', None) == doc_content) or
+                                                    (isinstance(orig_doc, dict) and orig_doc.get('content') == doc_content) or
+                                                    (str(orig_doc) == doc_content)), None)
+                                if old_index is None:
+                                    old_index = "?"
+                        except Exception:
+                            old_index = "?"
+                        # Show new and old position
+                        st.markdown(f"**Document {i+1}** (old rank: {old_index+1 if isinstance(old_index, int) else old_index}):")
                         # Handle LangChain Document objects (what retrieve_dense returns)
                         if hasattr(doc, 'page_content'):
                             # LangChain Document object
@@ -1504,29 +1554,11 @@ def render_reranking_section():
                         else:
                             # Fallback: convert to string
                             content = str(doc)
-                        
                         # Display content with truncation
                         st.write(content[:200] + "..." if len(content) > 200 else content)
 
                 else:
                     st.info("No reranked documents to display")       
-
-def render_prompting_section():
-    st.header("💭 Prompting")
-    
-    # Prompt Template
-    st.subheader("Prompt Template")
-    prompt_template = st.text_area(
-        "Enter your prompt template",
-        "Context: {context}\n\nQuestion: {question}\n\nAnswer:"
-    )
-    
-    # Prompt Engineering
-    st.subheader("Prompt Engineering")
-    prompt_technique = st.selectbox(
-        "Select Prompting Technique",
-        ["Standard", "Chain of Thought", "IRCoT", "Self-Correction"]
-    )
 
 def render_generation_section():
     
@@ -1534,30 +1566,32 @@ def render_generation_section():
     st.subheader("LLM Provider & Model")
     
     with st.expander("LLM provider and model"):
+        
         llm_provider = st.segmented_control(
             "Select LLM Provider",
             ["OpenAI", "Google", "HuggingFace"]
         )
         
-        # Model selection based on provider
-        if llm_provider == "OpenAI":
-            llm_model_name = st.segmented_control(
-                "OpenAI Model",
-                ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo", "gpt-4o"],
-                help="Select an OpenAI model for text generation"
-            )
-        elif llm_provider == "Google":
-            llm_model_name = st.segmented_control(
-                "Google Model",
-                ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.0-pro"],
-                help="Select a Google model for text generation"
-            )
-        elif llm_provider == "HuggingFace":
-            llm_model_name = st.segmented_control(
-                "Hugging Face",
-                ["hg1", "hg2", "hg3"],
-                help="Select a Hugging Face model for text generation"
-            )
+        if llm_provider != None:
+            # Model selection based on provider
+            if llm_provider == "OpenAI":
+                llm_model_name = st.segmented_control(
+                    "OpenAI Model",
+                    ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo", "gpt-4o"],
+                    help="Select an OpenAI model for text generation"
+                )
+            elif llm_provider == "Google":
+                llm_model_name = st.segmented_control(
+                    "Google Model",
+                    ["gemma-3n-e4b-it","gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash-lite", "gemini-1.5-flash", "gemini-2.5-flash-preview-04-17",],
+                    help="Select a Google model for text generation"
+                )
+            elif llm_provider == "HuggingFace":
+                llm_model_name = st.segmented_control(
+                    "Hugging Face",
+                    ["hg1", "hg2", "hg3"],
+                    help="Select a Hugging Face model for text generation"
+                )
         else:
             st.info("Choose LLM provider.")
     
@@ -1586,25 +1620,30 @@ Answer:"""
 
     # Display current session state for debugging
     with st.expander("Current Session State", expanded=False):
-        st.write("Query:", st.session_state.get('query', 'No query found'))
+        st.write("Query:", st.session_state.get('retrieval_dense_transformed_query', None))
         st.write("Reranked docs count:", len(st.session_state.get('reranked_retrieved_docs', [])))
         st.write("Model provider:", llm_provider if 'llm_provider' in locals() else 'Not selected')
         st.write("Model:", llm_model_name if 'llm_model_name' in locals() else 'Not selected')
 
     # Display reranked docs for reference
     with st.expander("Reranked docs (context)", expanded=False):
+
         if 'reranked_retrieved_docs' in st.session_state and st.session_state['reranked_retrieved_docs']:
-            for i, doc in enumerate(st.session_state['reranked_retrieved_docs']):
-                st.markdown(f"**Document {i+1}:**")
-                if hasattr(doc, 'page_content'):
-                    st.write(doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content)
-                elif isinstance(doc, dict) and 'content' in doc:
-                    st.write(doc['content'][:300] + "..." if len(doc['content']) > 300 else doc['content'])
-                else:
-                    st.write(str(doc)[:300] + "..." if len(str(doc)) > 300 else str(doc))
-                st.write("---")
+            st.info(f"Using reranked docs:, {st.session_state.get("reranked_type")}")
+            docs_to_use = st.session_state['reranked_retrieved_docs']
         else:
-            st.info("No reranked documents available. Please perform retrieval and reranking first.")   
+           st.info("No reranked documents available. Using retrieved docs wihotut reranking.")   
+           docs_to_use = st.session_state['retrieved_docs'] 
+        
+        for i, doc in enumerate(docs_to_use):
+            st.markdown(f"**Document {i+1}:**")
+            if hasattr(doc, 'page_content'):
+                st.write(doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content)
+            elif isinstance(doc, dict) and 'content' in doc:
+                st.write(doc['content'][:300] + "..." if len(doc['content']) > 300 else doc['content'])
+            else:
+                st.write(str(doc)[:300] + "..." if len(str(doc)) > 300 else str(doc))
+            st.write("---")  
 
     # Generate RAG Response Button
     if st.button("Generate RAG Response", type='primary'):
@@ -1612,143 +1651,334 @@ Answer:"""
         if 'query' not in st.session_state or not st.session_state['query']:
             st.error("Please enter a query in the Retrieval section first.")
         elif 'reranked_retrieved_docs' not in st.session_state or not st.session_state['reranked_retrieved_docs']:
-            st.error("Please perform retrieval and reranking first to get documents.")
+            st.info("No reranking done, will use retrieved docs without reranking.")
+            reranked_docs = st.session_state['retrieved_docs']
+        elif 'reranked_retrieved_docs' in st.session_state:
+            st.info("Reranked docs")
+            reranked_docs = st.session_state['reranked_retrieved_docs']
         elif 'llm_provider' not in locals() or not llm_provider:
             st.error("Please select an LLM provider.")
-        else:
-            try:
+
+        try:
+            # Prepare context from reranked documents
+            context_parts = []
+            for i, doc in enumerate(reranked_docs):
+                # Extract content from different document formats
+                if hasattr(doc, 'page_content'):
+                    content = doc.page_content
+                elif isinstance(doc, dict) and 'content' in doc:
+                    content = doc['content']
+                else:
+                    content = str(doc)
                 
-                # Get the reranked documents
-                reranked_docs = st.session_state['reranked_retrieved_docs']
-                
-                # Prepare context from reranked documents
-                context_parts = []
-                for i, doc in enumerate(reranked_docs):
-                    # Extract content from different document formats
-                    if hasattr(doc, 'page_content'):
-                        content = doc.page_content
-                    elif isinstance(doc, dict) and 'content' in doc:
-                        content = doc['content']
-                    else:
-                        content = str(doc)
-                    
-                    # Add document number and content to context
-                    context_parts.append(f"Document {i+1}:\n{content}\n")
-                
-                # Combine all context
-                context = "\n".join(context_parts)
-                
-                # Generate response using backend function
-                with st.spinner("Generating RAG response..."):
-                    rag_response = generate_rag_response(
-                        query=st.session_state['query'],
-                        context=context,
-                        llm_provider=llm_provider.lower(),
-                        llm_model_name=llm_model_name,
-                        prompt_template=prompt_template,
-                        temperature=model_temperature,
-                        max_tokens=model_max_tokens,
-                        top_p=model_top_p
-                    )
-                
-                st.session_state['rag_response'] = rag_response
-                st.success("RAG Response Generated Successfully!")
-                
-            except Exception as e:
-                st.error(f"Error generating RAG response: {str(e)}")
+                # Add document number and content to context
+                context_parts.append(f"Document {i+1}:\n{content}\n")
+            
+            # Combine all context
+            context = "\n".join(context_parts)
+            
+            print(llm_provider)
+
+            # Generate response using backend function
+            with st.spinner("Generating RAG response..."):
+                rag_response = generate_rag_response(
+                    query=st.session_state.get("retrieval_dense_transformed_query", st.session_state.get("query", "")),
+                    context=context,
+                    llm_provider=llm_provider.lower(),
+                    llm_model_name=llm_model_name,
+                    prompt_template=prompt_template,
+                    temperature=model_temperature,
+                    max_tokens=model_max_tokens,
+                    top_p=model_top_p
+                )
+            
+            # save session state variables
+            st.session_state['rag_response'] = rag_response
+            st.session_state['rag_response_llm_provider'] = llm_provider
+            st.session_state['rag_response_llm_model_name'] = llm_model_name
+            st.session_state['rag_response_prompt_template'] = prompt_template
+            st.session_state['rag_response_model_temperature'] = model_temperature
+            st.session_state['rag_response_model_max_tokens'] = model_max_tokens
+            st.session_state['rag_response_model_top_p'] = model_top_p
+            
+        except Exception as e:
+            st.error(f"Error generating RAG response: {str(e)}")
 
     if 'rag_response' in st.session_state:
         with st.expander("Generated Response", expanded=True):
-            st.write(st.session_state['rag_response'])
+            st.success(st.session_state['rag_response'])
 
 def render_evaluation_section():
     
     st.subheader("RAG Evaluation")
-    st.markdown("Generate evaluation questions from your documents using RAGAS TestsetGenerator.")
-    
-    # Check if documents are available in session state
-    if 'documents' not in st.session_state or not st.session_state.documents:
-        st.warning("Please load documents first in the Data section.")
-        return
-    
-    # Evaluation parameters
-    with st.expander("Evaluation set", expanded=True):
+    st.markdown("Evaluate your RAG pipeline with RAGAS evaluation framework.")
 
-        num_questions = st.slider(
-            "Number of Questions",
-            min_value=1,
-            max_value=30,
-            value=5,
-            help="Number of evaluation questions to generate per document"
-        )
+    with st.expander("Evaluation dataset", expanded=False):
+        
+        # Create two columns
+        col1, col2 = st.columns(2, border=True)
+        
+        # Column 1: Choose from existing evaluation files
+        with col1:
+            st.markdown("#### Load from File")
 
-        #st.info(st.session_state.documents[6:8])
+            # List all evaluation files in the data/evaluation directory
+            eval_dir = os.path.join("data", "evaluation","synthetic_sets")
+            eval_files = [f for f in os.listdir(eval_dir) if f.endswith(".json")]
+
+            if eval_files:
+                # Let the user select a file
+                selected_file = st.selectbox(
+                    "Select evaluation file",
+                    eval_files,
+                    help="Choose an existing evaluation dataset file",
+                    label_visibility='collapsed'
+                )
+
+                # Load the selected file when chosen
+                if selected_file:
+                    file_path = os.path.join(eval_dir, selected_file)
+                    try:
+                        # Load the JSON file
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            loaded_eval_set = json.load(f)
+                        
+                        # Store in session state
+                        st.session_state['evaluation_set'] = loaded_eval_set
+                        
+                        # Show preview of first question
+                        if loaded_eval_set:
+                            st.markdown("**Preview of first question:**")
+                            first_question = loaded_eval_set[0]
+                            st.info(f"Question: {first_question.get('question', 'No question')[:100]}...")
+
+                    except Exception as e:
+                        st.error(f"Error loading file: {e}")
+            else:
+                st.info("No evaluation files found in data/evaluation directory.")
+        
+        # Column 2: Create new evaluation set
+        with col2:
+
+            if 'documents' not in st.session_state or not st.session_state.documents:
+                st.warning("Please load documents in the Data section.")
+            else:
+
+                st.markdown("#### Create New Dataset")
+                st.markdown("Generate a new evaluation dataset using RAGAS TestsetGenerator.")
+                
+                num_questions = st.slider(
+                    "Number of Questions",
+                    min_value=1,
+                    max_value=30,
+                    value=5,
+                    help="Number of evaluation questions to generate per document"
+                )
+            
+                # Generate evaluation set button
+                if st.button("Generate Evaluation Set", type='primary'):
+                    if not num_questions:
+                        st.error("Please select at least one question.")
+                    else:
+                        try:
+                            with st.spinner("Generating evaluation set with RAGAS..."):
+                                
+                                # Call the backend function with documents from session state
+                                eval_set = make_ragas_evaluationset(
+                                    documents=st.session_state.documents,
+                                    questions_number=num_questions
+                                )
+
+                                # Display results
+                                if eval_set and len(eval_set) > 0:
+                                    st.success(f"Successfully generated evaluation set with {len(eval_set)} questions!")
+
+                                    # Display first question as example
+                                    if eval_set:
+                                        st.markdown("**Preview of first question:**")
+                                        first_question = eval_set[0]
+                                        st.info(f"Question: {first_question.get('question', 'No question')[:100]}...")
+                                        st.info(f"Answer: {first_question.get('answer', 'No answer')[:100]}...")
+                                else:
+                                    st.info("No questions were generated.")
+                                
+                                # Store evaluation set in session state for potential use
+                                st.session_state['evaluation_set'] = eval_set
+
+                        except Exception as e:
+                            st.error(f"Error generating evaluation set: {str(e)}")
     
-        # Generate evaluation set button
-        if st.button("Generate Evaluation Set", type='primary'):
-            if not num_questions:
-                st.error("Please select at least one question type.")
+    with st.expander("RAG settings"):
+                
+        # --- 1. Define required parameters for each retrieval type ---
+        retrieval_required_params = {
+            "dense": [
+                "retrieval_dense_top_k",
+                "retrieval_dense_mmr_fetch_k",
+                "retrieval_dense_mmr_lambda_mult",
+                "retrieval_dense_search_type",
+            ],
+            "sparse": [
+                "retrieval_sparse_top_k",
+                "embedding_sparse_method",
+                "embedding_sparse_kparam",
+                "embedding_sparse_bparam",
+                "embedded_documents_sparse",
+            ],
+            "hybrid": [
+                "embedding_provider",
+                "embedding_model_name",
+                "embedding_sparse_method",
+                "embedding_sparse_kparam",
+                "embedding_sparse_bparam",
+                "embedded_documents",
+                "embedded_documents_sparse",
+                "retrieval_hybrid_alpha",
+                "retrieval_hybrid_top_k",
+            ],
+        }
+
+        # --- 2. Define required parameters for reranking ---
+        rerank_required_params = {
+            None: [],  # No reranking
+            "cross_encoder": [
+                "reranked_type_model",
+                "reranked_top_k_rerank",
+            ],
+            "llm": [
+                "reranked_type_provider",
+                "reranked_type_model",
+                "reranked_top_k_rerank",
+            ],
+        }
+
+        # --- 3. Define required parameters for RAG response generation ---
+        rag_response_required_params = [
+            "rag_response_llm_provider",
+            "rag_response_llm_model_name",
+            "rag_response_prompt_template",
+            "rag_response_model_temperature",
+            "rag_response_model_max_tokens",
+            "rag_response_model_top_p",
+        ]
+
+        # --- 4. Always required ---
+        always_essential = ["evaluation_set", "retrieval_type", "vector_store"]
+
+        # --- 5. Build the full list of required params based on user choices ---
+        # Get current choices from session state
+        retrieval_type = st.session_state.get("retrieval_type")
+        reranked_type = st.session_state.get("reranked_type")
+
+        # Start with always required
+        essential_params = list(always_essential)
+
+        # Add retrieval-specific params
+        if retrieval_type in retrieval_required_params:
+            essential_params += retrieval_required_params[retrieval_type]
+
+        # Add reranking-specific params
+        if reranked_type in rerank_required_params:
+            essential_params += rerank_required_params[reranked_type]
+
+        # Add RAG response params (these are always needed for answer generation)
+        essential_params += rag_response_required_params
+
+        # --- 6. Check which essential parameters are missing ---
+        missing_essential = []
+        param_values = {}
+        for param in essential_params:
+            if param in st.session_state and st.session_state[param] not in [None, "", []]:
+                param_values[param] = st.session_state[param]
+            else:
+                missing_essential.append(param)
+                param_values[param] = None
+
+        # --- 7. Display status to user ---
+        if missing_essential:
+            st.error(f"Missing essential parameters: {', '.join(missing_essential)}")
+            st.info("Please complete the Data, Chunking, Embeddings, Vector Stores, and other relevant sections to populate these essential parameters.")
+        else: 
+            st.success("All required parameters for your current pipeline are available!")
+
+        # --- 8. Evaluation button ---
+        if st.button("Evaluate RAG pieline with given dataset", type='primary'):
+            if missing_essential:
+                st.error("Cannot create evaluation dataset. Please complete the essential sections first.")
             else:
                 try:
-                    with st.spinner("Generating evaluation set with RAGAS..."):
-                        
-                        # Call the backend function with documents from session state
-                        eval_set = make_ragas_evaluationset(
-                            documents=st.session_state.documents,
-                            questions_number=num_questions
-                        )
-                    
-                    # Display results
-                    st.success(f"Successfully generated evaluation set with {len(eval_set)} questions!")
-                    
-                    # Show sample questions
-                    with st.expander("Sample Generated Questions", expanded=True):
-                        if eval_set and len(eval_set) > 0:
-                            # Display first few questions as examples
-                            for i, question_data in enumerate(eval_set[:3]):  # Show first 3 questions
-                                st.markdown(f"**Question {i+1}:**")
-                                st.write(question_data.get('question', 'No question found'))
-                                st.markdown(f"**Answer:**")
-                                st.write(question_data.get('answer', 'No answer found'))
-                                st.markdown(f"**Context:**")
-                                st.write(question_data.get('context', 'No context found')[:200] + "..." if len(question_data.get('context', '')) > 200 else question_data.get('context', ''))
-                                st.write("---")
-                        else:
-                            st.info("No questions were generated.")
-                    
-                    # Store evaluation set in session state for potential use
-                    st.session_state.evaluation_set = eval_set
-                    
-                except Exception as e:
-                    st.error(f"Error generating evaluation set: {str(e)}")
-    
-    # Display existing evaluation sets if any
-    evaluation_dir = "data/evaluation"
-    if os.path.exists(evaluation_dir):
-        eval_files = [f for f in os.listdir(evaluation_dir) if f.endswith('.json')]
-        if eval_files:
-            with st.expander("Existing Evaluation Sets", expanded=False):
-                st.write("Previously generated evaluation sets:")
-                for file in eval_files:
-                    st.write(f"- {file}")
-    
-    # Additional evaluation metrics section
-    st.subheader("Evaluation Metrics")
-    metrics = st.multiselect(
-        "Select Metrics to Track",
-        ["Context Precision", "Context Recall", "Answer Faithfulness",
-         "Answer Relevancy", "Answer Correctness", "Latency", "Cost per Query"]
-    )
-    
-    # Sample visualization
-    if metrics:
-        data = pd.DataFrame({
-            'Metric': metrics,
-            'Score': np.random.uniform(0.7, 1.0, len(metrics))
-        })
-        fig = px.bar(data, x='Metric', y='Score', title='Evaluation Metrics')
-        st.plotly_chart(fig)
+                    RAG_evaluation_and_results = make_eval_dataset_and_results(
+                        evaluation_set=param_values["evaluation_set"],
+                        retrieval_type=param_values["retrieval_type"],
+                        embedding_provider=param_values.get("embedding_provider"),
+                        embedding_model_name=param_values.get("embedding_model_name"),  
+                        vector_store=param_values["vector_store"],
+                        embedded_documents_sparse=param_values.get("embedded_documents_sparse"),
+                        embedded_documents=param_values.get("embedded_documents"),
+                        retrieval_dense_top_k=param_values.get("retrieval_dense_top_k"),
+                        retrieval_dense_mmr_fetch_k=param_values.get("retrieval_dense_mmr_fetch_k"),
+                        retrieval_dense_mmr_lambda_mult=param_values.get("retrieval_dense_mmr_lambda_mult"),
+                        retrieval_dense_keywords=param_values.get("retrieval_dense_keywords"),
+                        retrieval_dense_search_type=param_values.get("retrieval_dense_search_type"),
+                        retrieval_sparse_top_k=param_values.get("retrieval_sparse_top_k"),
+                        embedding_sparse_method=param_values.get("embedding_sparse_method"),
+                        embedding_sparse_kparam=param_values.get("embedding_sparse_kparam"),
+                        embedding_sparse_bparam=param_values.get("embedding_sparse_bparam"),
+                        retrieval_hybrid_alpha=param_values.get("retrieval_hybrid_alpha"),
+                        retrieval_hybrid_top_k=param_values.get("retrieval_hybrid_top_k"),
+                        reranked_type=param_values.get("reranked_type"),
+                        reranked_type_model=param_values.get("reranked_type_model"),
+                        reranked_type_provider=param_values.get("reranked_type_provider"),
+                        reranked_top_k_rerank=param_values.get("reranked_top_k_rerank"),
+                        rag_response_llm_provider=param_values.get("rag_response_llm_provider"),
+                        rag_response_llm_model_name=param_values.get("rag_response_llm_model_name"),
+                        rag_response_prompt_template=param_values.get("rag_response_prompt_template"),
+                        rag_response_model_temperature=param_values.get("rag_response_model_temperature"),
+                        rag_response_model_max_tokens=param_values.get("rag_response_model_max_tokens"),
+                        rag_response_model_top_p=param_values.get("rag_response_model_top_p")
+                    )
 
+                    st.session_state['evaluation_dataset_with_RAG'] = RAG_evaluation_and_results[0]
+                    st.session_state['evaluation_result_with_RAG'] = RAG_evaluation_and_results[1]
+
+                    st.success(f"Created evaluation dataset with {len(RAG_evaluation_and_results)} items using RAG answers.")
+                    st.dataframe(st.session_state['evaluation_result_with_RAG'].to_pandas())
+
+                except Exception as e:
+                    st.error(f"Error creating evaluation dataset: {str(e)}")
+    
+    with st.expander("Results"):
+
+        # List all result files in the data/results directory
+        result_dir = os.path.join("data", "evaluation","results")
+        results_files = [f for f in os.listdir(result_dir) if f.endswith(".json")]
+
+        if results_files:
+            # Let the user select a file
+            selected_file = st.selectbox(
+                "Select results file",
+                results_files,
+                help="Choose an existing result dataset file",
+                label_visibility='collapsed'
+            )
+
+            # Load the selected file when chosen
+            if selected_file:
+                file_path = os.path.join(result_dir, selected_file)
+                try:
+                    # Load the JSON file
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        loaded_result_set = json.load(f)
+                    
+                    # Show preview of first question
+                    if loaded_result_set:
+                        st.dataframe(loaded_result_set)
+
+                except Exception as e:
+                    st.error(f"Error loading file: {e}")
+        else:
+            st.info("No result files found in data/results directory.")
+    
 # Render the selected section
 if selected == "Data":
     render_data_section()
@@ -1762,8 +1992,6 @@ elif selected == "Retrieval":
     render_retrieval_section()
 elif selected == "Reranking":
     render_reranking_section()
-elif selected == "Prompting":
-    render_prompting_section()
 elif selected == "Generation":
     render_generation_section()
 elif selected == "Evaluation":

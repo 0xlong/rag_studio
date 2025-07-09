@@ -1,0 +1,42 @@
+[
+  {
+    "question": "What type of problems is the current version of LAMBADA primarily designed to solve?",
+    "answer": "The current version of LAMBADA is mainly applicable to logical entailment problems, specifically classification problems.",
+    "contexts": [
+      "\"The current work is mainly applicable to logical entailment problems, where one needs to solve a classification problem of whether a goal can be proved, disproved, or neither proved nor disproved based on a theory. Future work can extend LAMBADA to non-classification cases, e.g., where one needs to apply logical reasoning to answer questions such as “What color is Fiona?”.\""
+    ],
+    "ground_truth": "The current version of LAMBADA is mainly applicable to logical entailment problems that involve classification."
+  },
+  {
+    "question": "According to the document, what is the accuracy of LAMBADA's predictions when it predicts PROVED or DISPROVED?",
+    "answer": "When LAMBADA predicts PROVED or DISPROVED, the prediction is mostly correct, with slightly higher accuracy for PROVED predictions.",
+    "contexts": [
+      "According to the results, we observe that whenever LAMBADA predicts PROVED or DISPROVED , the prediction is mostly correct. The accuracy is slightly more on cases where the prediction is PROVED than DISPROVED . We believe this is because DISPROVED cases typically involve negation that makes the reasoning more complex. However, there are several examples for which the label is PROVED or DISPROVED , whereas the model predicts UNKNOWN ."
+    ],
+    "ground_truth": "When LAMBADA predicts PROVED or DISPROVED, the prediction is mostly correct, with slightly higher accuracy for PROVED predictions."
+  },
+  {
+    "question": "According to the document, what happens to the success rate of SI as the inferences progress?",
+    "answer": "The success rate of SI decreases in the later inferences of the model.",
+    "contexts": [
+      "From the results in Figure 3, we can see that the success rate indeed decreases in the later inferences of the model, where the size of the input theory is larger and therefore a larger space needs to be searched to find the right combination of facts and rules."
+    ],
+    "ground_truth": "The success rate of SI decreases in the later inferences of the model."
+  },
+  {
+    "question": "What are the three main reasons that CoT produces incorrect proof chains, even when the predicted label is correct?",
+    "answer": "The three main reasons are hallucinating rules or facts, not understanding conjunction, and making invalid derivations.",
+    "contexts": [
+      "In Figure 2(e), we observed that CoT mostly produces wrong proof chains even when the predicted label is correct. Through manually analyzing 50 examples for which CoT predicted the correct label, we identified three dominant reasons for the chains being wrong: 1- hallucinating rules or facts, 2- not understanding conjunction, and 3- making invalid derivations."
+    ],
+    "ground_truth": "The three dominant reasons for CoT producing wrong proof chains are hallucinating rules or facts, not understanding conjunction, and making invalid derivations."
+  },
+  {
+    "question": "What type of algorithm is LAMBADA?",
+    "answer": "LAMBADA is a recursive algorithm.",
+    "contexts": [
+      "Since LAMBADA is a recursive algorithm, during the proof of an example Algorithm 1 may be called"
+    ],
+    "ground_truth": "LAMBADA is a recursive algorithm."
+  }
+]
