@@ -891,6 +891,7 @@ def render_vector_stores_section():
                 ["l2", "ip", "cosine"],
                 help="Choose the distance metric for FAISS Flat index. l2=Euclidean, ip=Inner Product, cosine=Cosine Similarity."
             )
+            st.session_state['distance_metric'] = distance_metric
 
         # --- FAISS parameter tuning controls ---
         if vector_store == "FAISS":
@@ -907,13 +908,13 @@ def render_vector_stores_section():
             # For Flat: l2, ip, cosine; For IVF/HNSW: l2, ip
             if faiss_params:
                 if faiss_params.lower() in ['flat','ivf', 'hnsw']:
-                    distance_metric = st.segmented_control(
+                    distance_metric_faiss = st.segmented_control(
                         "Distance Metric",
                         ["l2", "ip", "cosine"],
                         help="Choose the distance metric for FAISS Flat index. l2=Euclidean, ip=Inner Product, cosine=Cosine Similarity."
                     )
                 else:
-                    distance_metric = "l2"  # fallback default
+                    distance_metric_faiss = "l2"  # fallback default
 
             # This segmented control allows the user to select the document store (docstore) type for FAISS.
             docstore_type = st.segmented_control(
@@ -943,10 +944,21 @@ def render_vector_stores_section():
                     step=1,
                     help="Number of neighbors for HNSW. Higher = more accurate, more memory. Default is 32."
                 )
-        
-    if vector_store:
+    
+
+    # Only show the button if the required parameters are chosen
+    show_create_button = False
+
+    # For Chroma, show button only if distance_metric is chosen
+    if vector_store == "Chroma" and 'distance_metric' in locals() and distance_metric:
+        show_create_button = True
+    # For FAISS, show button only if both distance_metric_faiss and docstore_type are chosen
+    elif vector_store == "FAISS" and 'distance_metric_faiss' in locals() and distance_metric_faiss and 'docstore_type' in locals() and docstore_type:
+        show_create_button = True
+
+    # Only show the button if the above conditions are met
+    if show_create_button:
         if st.button("Create Vector Store", type='primary', key="create_vector_store"):
-            
             # It prepares a configuration dictionary for the selected vector store and calls the backend function.
             vector_store_config = {}
             vector_store_config['distance_metric'] = distance_metric
@@ -955,6 +967,7 @@ def render_vector_stores_section():
                 # If FAISS is chosen, we specify the index type and docstore type selected by the user.
                 vector_store_config['index_type'] = faiss_params.lower()
                 vector_store_config['docstore_type'] = docstore_type.replace(" ", "_").lower()
+                vector_store_config['distance_metric'] = distance_metric_faiss
                 
                 if faiss_params == "IVF":
                     # For IVF, we pass the number of clusters ('nlist').
@@ -962,8 +975,7 @@ def render_vector_stores_section():
                 elif faiss_params == "HNSW":
                     # For HNSW, we pass the number of neighbors ('m').
                     vector_store_config['hnsw_m'] = hnsw_m
-
-
+            
             # 2. Check if there are embedded documents available in the session state.
             #    This is crucial because we can only create a vector store if we have embeddings.
             if 'embedded_documents' in st.session_state and st.session_state.embedded_documents:
