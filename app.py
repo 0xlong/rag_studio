@@ -1499,6 +1499,7 @@ def render_reranking_section():
                                     old_index = "?"
                         except Exception:
                             old_index = "?"
+
                         # Show new and old position
                         st.markdown(f"**Document {i+1}** (old rank: {old_index+1 if isinstance(old_index, int) else old_index}):")
                         # Handle LangChain Document objects (what retrieve_dense returns)
@@ -1510,6 +1511,7 @@ def render_reranking_section():
                         else:
                             # Fallback: convert to string
                             content = str(doc)
+
                         # Display content with truncation
                         st.write(content[:200] + "..." if len(content) > 200 else content)
 
@@ -1602,52 +1604,53 @@ def render_generation_section():
                     st.write("---")  
 
     # Generate RAG Response Button
-    if reranked_docs is not None:
-        if st.button("Generate RAG Response", type='primary'):
-            try:
-                # Prepare context from reranked documents
-                context_parts = []
-                for i, doc in enumerate(reranked_docs):
-                    # Extract content from different document formats
-                    if hasattr(doc, 'page_content'):
-                        content = doc.page_content
-                    elif isinstance(doc, dict) and 'content' in doc:
-                        content = doc['content']
-                    else:
-                        content = str(doc)
+    if 'generation_llm_model_name' in st.session_state:
+        if reranked_docs is not None:
+            if st.button("Generate RAG Response", type='primary'):
+                try:
+                    # Prepare context from reranked documents
+                    context_parts = []
+                    for i, doc in enumerate(reranked_docs):
+                        # Extract content from different document formats
+                        if hasattr(doc, 'page_content'):
+                            content = doc.page_content
+                        elif isinstance(doc, dict) and 'content' in doc:
+                            content = doc['content']
+                        else:
+                            content = str(doc)
+                        
+                        # Add document number and content to context
+                        context_parts.append(f"Document {i+1}:\n{content}\n")
                     
-                    # Add document number and content to context
-                    context_parts.append(f"Document {i+1}:\n{content}\n")
-                
-                # Combine all context
-                context = "\n".join(context_parts)
-                
-                print(llm_provider)
+                    # Combine all context
+                    context = "\n".join(context_parts)
+                    
+                    print(llm_provider)
 
-                # Generate response using backend function
-                with st.spinner("Generating RAG response..."):
-                    rag_response = generate_rag_response(
-                        query=st.session_state.get("retrieval_dense_transformed_query", st.session_state.get("query", "")),
-                        context=context,
-                        llm_provider=llm_provider.lower(),
-                        llm_model_name=llm_model_name,
-                        prompt_template=prompt_template,
-                        temperature=model_temperature,
-                        max_tokens=model_max_tokens,
-                        top_p=model_top_p
-                    )
-                
-                # save session state variables
-                st.session_state['rag_response'] = rag_response
-                st.session_state['rag_response_llm_provider'] = llm_provider
-                st.session_state['rag_response_llm_model_name'] = llm_model_name
-                st.session_state['rag_response_prompt_template'] = prompt_template
-                st.session_state['rag_response_model_temperature'] = model_temperature
-                st.session_state['rag_response_model_max_tokens'] = model_max_tokens
-                st.session_state['rag_response_model_top_p'] = model_top_p
-                
-            except Exception as e:
-                st.error(f"Error generating RAG response: {str(e)}")
+                    # Generate response using backend function
+                    with st.spinner("Generating RAG response..."):
+                        rag_response = generate_rag_response(
+                            query=st.session_state.get("retrieval_dense_transformed_query", st.session_state.get("query", "")),
+                            context=context,
+                            llm_provider=llm_provider.lower(),
+                            llm_model_name=llm_model_name,
+                            prompt_template=prompt_template,
+                            temperature=model_temperature,
+                            max_tokens=model_max_tokens,
+                            top_p=model_top_p
+                        )
+                    
+                    # save session state variables
+                    st.session_state['rag_response'] = rag_response
+                    st.session_state['rag_response_llm_provider'] = llm_provider
+                    st.session_state['rag_response_llm_model_name'] = llm_model_name
+                    st.session_state['rag_response_prompt_template'] = prompt_template
+                    st.session_state['rag_response_model_temperature'] = model_temperature
+                    st.session_state['rag_response_model_max_tokens'] = model_max_tokens
+                    st.session_state['rag_response_model_top_p'] = model_top_p
+                    
+                except Exception as e:
+                    st.error(f"Error generating RAG response: {str(e)}")
 
     if 'rag_response' in st.session_state:
         with st.expander("RAG pipeline answer", expanded=True):
