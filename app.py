@@ -945,7 +945,6 @@ def render_vector_stores_section():
                     help="Number of neighbors for HNSW. Higher = more accurate, more memory. Default is 32."
                 )
     
-
     # Only show the button if the required parameters are chosen
     show_create_button = False
 
@@ -1379,163 +1378,165 @@ def render_reranking_section():
         df = pd.DataFrame(RERANKING_TECHNIQUES_COMPARISON)
         st.dataframe(df, hide_index=True)
 
-    with st.expander("Select Reranker"):
-        reranker = st.segmented_control(
-            "Select reranker",
-            ["Cross-Encoder", "LLM-as-a-judge"],
-            label_visibility="collapsed"
+
+    st.markdown("###### Select reranker")
+    reranker = st.segmented_control(
+        "Select reranker",
+        ["Cross-Encoder", "LLM-as-a-judge"],
+        label_visibility="collapsed"
+    )
+    
+    if reranker == "Cross-Encoder":
+        reranker_model = st.selectbox(
+            "Select Model",
+            ["cross-encoder/ms-marco-MiniLM-L-6-v2", "cross-encoder/ms-marco-MiniLM-L-12-v2"]
         )
         
-        if reranker == "Cross-Encoder":
-            reranker_model = st.selectbox(
-                "Select Model",
-                ["cross-encoder/ms-marco-MiniLM-L-6-v2", "cross-encoder/ms-marco-MiniLM-L-12-v2"]
-            )
-            
-            # Add slider for top_k parameter
-            top_k_rerank = st.slider(
-                "Top-K documents to rerank",
-                min_value=1,
-                max_value=20,
-                value=5,
-                help="Number of top documents to return after reranking. Higher values may include less relevant documents."
-            )
+        # Add slider for top_k parameter
+        top_k_rerank = st.slider(
+            "Top-K documents to rerank",
+            min_value=1,
+            max_value=20,
+            value=5,
+            help="Number of top documents to return after reranking. Higher values may include less relevant documents."
+        )
 
-        elif reranker == "LLM-as-a-judge":
-            # LLM-as-a-judge reranking parameters
-            llm_provider = st.selectbox(
-                "Select LLM Provider",
-                ["google","openai", "huggingface"],
-                help="Choose the LLM provider for judging document relevance"
-            )
-            
-            # Model selection based on provider
-            if llm_provider == "google":
-                llm_model_name = st.selectbox(
-                    "Google Model",
-                    ["gemini-2.0-flash-lite", "gemini-2.0-flash"],
-                    help="Select a Google model for LLM-as-a-judge"
-                )
-            
-            # Add slider for top_k parameter
-            top_k_rerank = st.slider(
-                "Top-K documents to rerank",
-                min_value=1,
-                max_value=20,
-                value=5,
-                help="Number of top documents to return after reranking. Higher values may include less relevant documents."
-            )
-            st.session_state['reranked_top_k_rerank'] = top_k_rerank
+    elif reranker == "LLM-as-a-judge":
+        # LLM-as-a-judge reranking parameters
+        llm_provider = st.selectbox(
+            "Select LLM Provider",
+            ["google","openai", "huggingface"],
+            help="Choose the LLM provider for judging document relevance"
+        )
         
-    if st.button("Rerank", key="rerank_crossencoder"):
-
-        if reranker == "Cross-Encoder":
-            if 'retrieved_docs' in st.session_state:
-                reranked_docs_crossencoder = rerank_cross_encoder(st.session_state['query'],
-                                                                    st.session_state['retrieved_docs'],
-                                                                    model_name = reranker_model,
-                                                                    top_k=top_k_rerank
-                                                                    )
-                st.session_state['reranked_retrieved_docs'] = reranked_docs_crossencoder
-                st.session_state['reranked_type'] = 'cross_encoder'
-                st.session_state['reranked_type_model'] = reranker_model
-                st.success("Reranking completed successfully!")
-            else:
-                st.warning("Please perform a retrieval first to get documents to rerank.")
-                reranked_docs_crossencoder = None
-
-        elif reranker == "LLM-as-a-judge":
-
-            if 'retrieved_docs' in st.session_state:
-
-                reranked_docs_llm_judge = rerank_llm_judge(
-                    query=st.session_state['query'],  # The user's query
-                    documents=st.session_state['retrieved_docs'],  # The docs to rerank
-                    llm_provider=llm_provider,  # Provider selected in UI
-                    llm_model_name=llm_model_name,  # Model selected in UI
-                    top_k=top_k_rerank  # How many docs to return
-                )
-
-                # Save reranked docs in session state for display
-                st.session_state['reranked_retrieved_docs'] = reranked_docs_llm_judge
-                st.session_state['reranked_type'] = 'llm'
-                st.session_state['reranked_type_provider'] = llm_provider
-                st.session_state['reranked_type_model'] = llm_model_name
-                st.success("LLM-as-a-judge reranking completed successfully!")
-            else:
-                st.warning("Please perform a retrieval first to get documents to rerank.")
-                reranked_docs_llm_judge = None
-
+        # Model selection based on provider
+        if llm_provider == "google":
+            llm_model_name = st.selectbox(
+                "Google Model",
+                ["gemini-2.0-flash-lite", "gemini-2.0-flash"],
+                help="Select a Google model for LLM-as-a-judge"
+            )
+        
+        # Add slider for top_k parameter
+        top_k_rerank = st.slider(
+            "Top-K documents to rerank",
+            min_value=1,
+            max_value=20,
+            value=5,
+            help="Number of top documents to return after reranking. Higher values may include less relevant documents."
+        )
         st.session_state['reranked_top_k_rerank'] = top_k_rerank
+        
+    if reranker:
+        if st.button("Rerank", key="rerank_crossencoder"):
 
-        # show reranked docs and original docs side by side
-        with st.expander("Comparison: Original vs Reranked Documents", expanded=True):
-
-            col_1, col_2 = st.columns(2, border=True)
-            
-            with col_1:
-                st.markdown("#### Original Documents")
-                if 'retrieved_docs' in st.session_state and st.session_state['retrieved_docs']:
-                    for i, doc in enumerate(st.session_state['retrieved_docs'][:top_k_rerank]):
-                        st.write("---")
-                        st.markdown(f"**Document {i+1}:**")
-                        # Handle LangChain Document objects (what retrieve_dense returns)
-                        if hasattr(doc, 'page_content'):
-                            # LangChain Document object
-                            content = doc.page_content
-                        elif isinstance(doc, dict):
-                            content = doc['content']
-                        else:
-                            # Fallback: convert to string
-                            content = str(doc)
-                        
-                        # Display content with truncation
-                        st.write(content[:200] + "..." if len(content) > 200 else content)
-                        
+            if reranker == "Cross-Encoder":
+                if 'retrieved_docs' in st.session_state:
+                    reranked_docs_crossencoder = rerank_cross_encoder(st.session_state['query'],
+                                                                        st.session_state['retrieved_docs'],
+                                                                        model_name = reranker_model,
+                                                                        top_k=top_k_rerank
+                                                                        )
+                    st.session_state['reranked_retrieved_docs'] = reranked_docs_crossencoder
+                    st.session_state['reranked_type'] = 'cross_encoder'
+                    st.session_state['reranked_type_model'] = reranker_model
+                    st.success("Reranking completed successfully!")
                 else:
-                    st.info("No original documents to display")
-            
-            with col_2:
-                st.markdown("#### Reranked Documents")
-                if 'reranked_retrieved_docs' in st.session_state and st.session_state['reranked_retrieved_docs']:
-                    # Get the original docs for position lookup
-                    original_docs = st.session_state.get('retrieved_docs', [])
-                    for i, doc in enumerate(st.session_state['reranked_retrieved_docs']):
-                        st.write("---")
-                        # Try to find the old index (position in original_docs)
-                        try:
-                            # Compare by object identity first, fallback to content if needed
-                            if doc in original_docs:
-                                old_index = original_docs.index(doc)
+                    st.warning("Please perform a retrieval first to get documents to rerank.")
+                    reranked_docs_crossencoder = None
+
+            elif reranker == "LLM-as-a-judge":
+
+                if 'retrieved_docs' in st.session_state:
+
+                    reranked_docs_llm_judge = rerank_llm_judge(
+                        query=st.session_state['query'],  # The user's query
+                        documents=st.session_state['retrieved_docs'],  # The docs to rerank
+                        llm_provider=llm_provider,  # Provider selected in UI
+                        llm_model_name=llm_model_name,  # Model selected in UI
+                        top_k=top_k_rerank  # How many docs to return
+                    )
+
+                    # Save reranked docs in session state for display
+                    st.session_state['reranked_retrieved_docs'] = reranked_docs_llm_judge
+                    st.session_state['reranked_type'] = 'llm'
+                    st.session_state['reranked_type_provider'] = llm_provider
+                    st.session_state['reranked_type_model'] = llm_model_name
+                    st.success("LLM-as-a-judge reranking completed successfully!")
+                else:
+                    st.warning("Please perform a retrieval first to get documents to rerank.")
+                    reranked_docs_llm_judge = None
+
+            st.session_state['reranked_top_k_rerank'] = top_k_rerank
+
+            # show reranked docs and original docs side by side
+            with st.expander("Comparison: Original vs Reranked Documents", expanded=True):
+
+                col_1, col_2 = st.columns(2, border=True)
+                
+                with col_1:
+                    st.markdown("#### Original Documents")
+                    if 'retrieved_docs' in st.session_state and st.session_state['retrieved_docs']:
+                        for i, doc in enumerate(st.session_state['retrieved_docs'][:top_k_rerank]):
+                            st.write("---")
+                            st.markdown(f"**Document {i+1}:**")
+                            # Handle LangChain Document objects (what retrieve_dense returns)
+                            if hasattr(doc, 'page_content'):
+                                # LangChain Document object
+                                content = doc.page_content
+                            elif isinstance(doc, dict):
+                                content = doc['content']
                             else:
-                                # Fallback: compare by content if not the same object
-                                doc_content = doc.page_content if hasattr(doc, 'page_content') else (doc['content'] if isinstance(doc, dict) and 'content' in doc else str(doc))
-                                old_index = next((j for j, orig_doc in enumerate(original_docs)
-                                                 if (getattr(orig_doc, 'page_content', None) == doc_content) or
-                                                    (isinstance(orig_doc, dict) and orig_doc.get('content') == doc_content) or
-                                                    (str(orig_doc) == doc_content)), None)
-                                if old_index is None:
-                                    old_index = "?"
-                        except Exception:
-                            old_index = "?"
+                                # Fallback: convert to string
+                                content = str(doc)
+                            
+                            # Display content with truncation
+                            st.write(content[:200] + "..." if len(content) > 200 else content)
+                            
+                    else:
+                        st.info("No original documents to display")
+                
+                with col_2:
+                    st.markdown("#### Reranked Documents")
+                    if 'reranked_retrieved_docs' in st.session_state and st.session_state['reranked_retrieved_docs']:
+                        # Get the original docs for position lookup
+                        original_docs = st.session_state.get('retrieved_docs', [])
+                        for i, doc in enumerate(st.session_state['reranked_retrieved_docs']):
+                            st.write("---")
+                            # Try to find the old index (position in original_docs)
+                            try:
+                                # Compare by object identity first, fallback to content if needed
+                                if doc in original_docs:
+                                    old_index = original_docs.index(doc)
+                                else:
+                                    # Fallback: compare by content if not the same object
+                                    doc_content = doc.page_content if hasattr(doc, 'page_content') else (doc['content'] if isinstance(doc, dict) and 'content' in doc else str(doc))
+                                    old_index = next((j for j, orig_doc in enumerate(original_docs)
+                                                    if (getattr(orig_doc, 'page_content', None) == doc_content) or
+                                                        (isinstance(orig_doc, dict) and orig_doc.get('content') == doc_content) or
+                                                        (str(orig_doc) == doc_content)), None)
+                                    if old_index is None:
+                                        old_index = "?"
+                            except Exception:
+                                old_index = "?"
 
-                        # Show new and old position
-                        st.markdown(f"**Document {i+1}** (old rank: {old_index+1 if isinstance(old_index, int) else old_index}):")
-                        # Handle LangChain Document objects (what retrieve_dense returns)
-                        if hasattr(doc, 'page_content'):
-                            # LangChain Document object
-                            content = doc.page_content
-                        elif isinstance(doc, dict):
-                            content = doc['content']
-                        else:
-                            # Fallback: convert to string
-                            content = str(doc)
+                            # Show new and old position
+                            st.markdown(f"**Document {i+1}** (old rank: {old_index+1 if isinstance(old_index, int) else old_index}):")
+                            # Handle LangChain Document objects (what retrieve_dense returns)
+                            if hasattr(doc, 'page_content'):
+                                # LangChain Document object
+                                content = doc.page_content
+                            elif isinstance(doc, dict):
+                                content = doc['content']
+                            else:
+                                # Fallback: convert to string
+                                content = str(doc)
 
-                        # Display content with truncation
-                        st.write(content[:200] + "..." if len(content) > 200 else content)
+                            # Display content with truncation
+                            st.write(content[:200] + "..." if len(content) > 200 else content)
 
-                else:
-                    st.info("No reranked documents to display")       
+                    else:
+                        st.info("No reranked documents to display")       
 
 def render_generation_section():
     
