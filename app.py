@@ -1071,17 +1071,15 @@ def render_retrieval_section():
                     )  # This segmented control lets the user pick how to transform their query before retrieval. Each method is explained above for clarity.
                     
                     if st.button("Transform query"):
-                        if not query:
-                            st.warning("Please enter a query to transform.")
-                        else:
-                            # Prepare the mode for the backend function (transforms Multi-Query to multi_query)
-                            query_transformation_type = query_transform_method.replace(" ", "_").replace("-", "_").lower()
 
-                            # Call the backend function to perform the query transformation
-                            transformed_query = query_transform(query, mode=query_transformation_type)
+                        # Prepare the mode for the backend function (transforms Multi-Query to multi_query)
+                        query_transformation_type = query_transform_method.replace(" ", "_").replace("-", "_").lower()
 
-                            # Store the transformed query in session state so it can be accessed later
-                            st.session_state['retrieval_dense_transformed_query'] = transformed_query[0]
+                        # Call the backend function to perform the query transformation
+                        transformed_query = query_transform(query, mode=query_transformation_type)
+
+                        # Store the transformed query in session state so it can be accessed later
+                        st.session_state['retrieval_dense_transformed_query'] = transformed_query[0]
                 
                 with col2:
                     if 'query' in st.session_state:
@@ -1173,7 +1171,7 @@ def render_retrieval_section():
                     else:
                         # Use the transformed query if it exists in session state, otherwise use the original query.
                         query_for_retrieval = st.session_state.get("retrieval_dense_transformed_query", query)
-                        st.info(query_for_retrieval)
+                        st.info(f"Query: \n{query_for_retrieval}")
 
                         with st.spinner("Retrieving relevant documents..."):
                             try:
@@ -1224,8 +1222,8 @@ def render_retrieval_section():
             sparse_chunks = st.session_state.get('embedded_documents_sparse', [])
 
             # 3. Get embedding model info
-            embedding_provider = st.session_state.get('embedding_provider')
-            embedding_model_name = st.session_state.get('embedding_model_name')
+            embedding_provider = st.session_state.get('embedding_provider','Google') # check for model provider, if None then use Google
+            embedding_model_name = st.session_state.get('embedding_model_name','embedding-001') # check for model provider, if None then use embedding-001
 
             # 4. Get sparse embedding info
             embedding_sparse_method = st.session_state.get('embedding_sparse_method')
@@ -1236,7 +1234,7 @@ def render_retrieval_section():
                 with st.spinner("Retrieving relevant documents (hybrid)..."):
                     try:
                         retrieved_docs_hybrid = retrieve_hybrid(
-                            query=query,
+                            query=st.session_state.get("retrieval_dense_transformed_query", query), # get transformed query if exist or basic query
                             embedding_provider=embedding_provider,
                             embedding_model_name=embedding_model_name,
                             embedding_sparse_method=embedding_sparse_method,
@@ -1332,7 +1330,7 @@ def render_retrieval_section():
 
                     from backend import retrieve_sparse
                     results = retrieve_sparse(
-                        query,
+                        st.session_state.get("retrieval_dense_transformed_query", query), # get transformed query if exist or basic query,
                         sparse_chunks,
                         top_k=sparse_top_k,
                         embedding_sparse_method=st.session_state.get('embedding_sparse_method'),
