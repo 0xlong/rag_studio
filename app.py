@@ -120,6 +120,14 @@ with st.sidebar:
             },
         }
     )
+    # --- Add Clear Cache Button at the bottom of the sidebar ---
+    # This button will clear all Streamlit session state variables when clicked.
+    # We use st.button and place it after the menu so it appears at the bottom.
+    st.markdown("<br><br><br><br><br><br><br><br>", unsafe_allow_html=True)  # Horizontal line for separation
+    if st.button("Clear Cache"):
+        # Loop through all keys in session_state and delete them
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
 
 # Main content area
 def render_data_section():
