@@ -960,21 +960,23 @@ def render_vector_stores_section():
         if st.button("Create Vector Store", type='primary', key="create_vector_store"):
             # It prepares a configuration dictionary for the selected vector store and calls the backend function.
             vector_store_config = {}
-            vector_store_config['distance_metric'] = distance_metric
 
-            if vector_store == "FAISS":
-                # If FAISS is chosen, we specify the index type and docstore type selected by the user.
+            # For Chroma, use the distance_metric variable set by the user
+            if vector_store == "Chroma":
+                vector_store_config['distance_metric'] = distance_metric
+
+            # For FAISS, use the distance_metric_faiss and other FAISS-specific params
+            elif vector_store == "FAISS":
                 vector_store_config['index_type'] = faiss_params.lower()
                 vector_store_config['docstore_type'] = docstore_type.replace(" ", "_").lower()
                 vector_store_config['distance_metric'] = distance_metric_faiss
-                
                 if faiss_params == "IVF":
-                    # For IVF, we pass the number of clusters ('nlist').
                     vector_store_config['nlist'] = nlist
                 elif faiss_params == "HNSW":
-                    # For HNSW, we pass the number of neighbors ('m').
                     vector_store_config['hnsw_m'] = hnsw_m
-            
+
+            # You can add more elifs for other vector store types if needed
+
             # 2. Check if there are embedded documents available in the session state.
             #    This is crucial because we can only create a vector store if we have embeddings.
             if 'embedded_documents' in st.session_state and st.session_state.embedded_documents:
@@ -1352,11 +1354,10 @@ def render_retrieval_section():
                         sparse_chunks,
                         top_k=sparse_top_k,
                         embedding_sparse_method=st.session_state.get('embedding_sparse_method'),
-                        bm25_k1 = st.session_state['embedding_sparse_kparam'],
-                        bm25_b = st.session_state['embedding_sparse_bparam']
+                        bm25_k1 = st.session_state.get('embedding_sparse_kparam', None),
+                        bm25_b = st.session_state.get('embedding_sparse_bparam', None)
                     )
                     if results:
-
                         # assign session state variables
                         st.session_state['retrieval_type'] = 'sparse'
                         st.session_state['retrieval_sparse_top_k'] = sparse_top_k
@@ -1372,6 +1373,12 @@ def render_reranking_section():
     # Reranking Model Selection
     st.subheader("Reranking Model")
     st.markdown("Reorders retrieved documents using different techniques")
+
+    if 'retrieved_docs' in st.session_state:
+        with st.expander("Retrieved docs"):
+            st.write(st.session_state.get('retrieved_docs','Not found'))
+    else:
+        st.info("Extract relevant docs from Retrieval section.")
 
     with st.expander("Re-ranking techniques Comparison"):
         # Vector Stores dtaframe comparison
