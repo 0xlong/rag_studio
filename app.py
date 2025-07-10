@@ -1451,6 +1451,7 @@ def render_reranking_section():
 
         # show reranked docs and original docs side by side
         with st.expander("Comparison: Original vs Reranked Documents", expanded=True):
+
             col_1, col_2 = st.columns(2, border=True)
             
             with col_1:
@@ -1463,6 +1464,8 @@ def render_reranking_section():
                         if hasattr(doc, 'page_content'):
                             # LangChain Document object
                             content = doc.page_content
+                        elif isinstance(doc, dict):
+                            content = doc['content']
                         else:
                             # Fallback: convert to string
                             content = str(doc)
@@ -1502,6 +1505,8 @@ def render_reranking_section():
                         if hasattr(doc, 'page_content'):
                             # LangChain Document object
                             content = doc.page_content
+                        elif isinstance(doc, dict):
+                            content = doc['content']
                         else:
                             # Fallback: convert to string
                             content = str(doc)

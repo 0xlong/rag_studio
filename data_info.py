@@ -134,28 +134,20 @@ VECTOR_STORES_COMPARISON = {
 
 RERANKING_TECHNIQUES_COMPARISON = {
     'Technique': [
-        'Hybrid Search',
         'Cross-encoder',
-        'LLM as a Judge',
-        'MMR (Maximal Marginal Relevance)'
+        'LLM as a Judge'
     ],
     'Pros': [
-        'Combines keyword and semantic strengths, handles abbreviations/exact matches, improves recall.',
         'High precision, deep semantic understanding of query-document relevance, strong for complex queries.',
         'Leverages LLM reasoning for nuanced relevance judgments, adaptable with prompting, can provide detailed rationales.',
-        'Balances relevance with diversity, reduces redundancy, provides more comprehensive context to LLM, mitigates missing nuances.'
     ],
     'Cons': [
-        'More complex to implement and tune, slower than pure semantic search due to multiple methods, not all vector DBs support it natively.',
         'Computationally expensive, higher latency due to processing query-document pairs, can be slower for large numbers of documents.',
         'High computational cost (multiple LLM inferences), sensitive to prompt wording, can be slow, potentially over-complex for simple tasks.',
-        'Requires defining a diversity metric (often cosine similarity between documents), effectiveness depends on the lambda parameter tuning.'
     ],
     'Best for RAG': [
-        'When both exact keyword matches and semantic understanding are crucial (e.g., code search, specific entity retrieval, highly structured data).',
         'Production RAG systems where high accuracy and deep understanding of relevance are paramount, even at the cost of some latency.',
         'Advanced RAG pipelines requiring highly nuanced and context-aware reranking, especially for complex or ambiguous queries, and when interpretability of reranking decisions is desired.',
-        'When the LLM context window is limited and you need to ensure the retrieved documents cover a broad range of relevant subtopics and perspectives, avoiding repetitive information.'
     ]
 }
 
