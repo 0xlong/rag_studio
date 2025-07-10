@@ -130,8 +130,8 @@ def render_data_section():
     st.markdown("Choose data for Your RAG pipeline from options below.")
 
     data_source = st.segmented_control(
-        "",
-        ["Local Files", "Web Content", "Databases", "APIs & Notions"],
+        "Source type",
+        ["Local Files", "Web Content", "Databases", "APIs & Notions"], label_visibility='hidden'
     )
     st.markdown("""<br>""", unsafe_allow_html=True)
     
