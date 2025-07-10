@@ -36,3 +36,6 @@ ENV/
 
 # Streamlit secrets (do not share sensitive info)
 .streamlit/secrets.toml 
+
+# Ignore data folder
+data/
