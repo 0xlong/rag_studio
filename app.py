@@ -4,7 +4,7 @@ import pandas as pd
 import tempfile
 import os
 from backend import load_document, chunking_fixed_size, chunking_recursive, chunking_by_doc_type, chunking_sentence_window, chunking_semantic, chunking_propositions, embed_dense, embed_sparse, add_to_vector_store, query_transform, retrieve_dense, retrieve_hybrid, retrieve_sparse, rerank_cross_encoder, rerank_llm_judge, generate_rag_response, make_ragas_evaluationset, make_eval_dataset_and_results
-from data_info import chunking_strategies_comparison_df, get_proposition_prompt_text, VECTOR_STORES_COMPARISON, RERANKING_TECHNIQUES_COMPARISON, RETRIEVAL_TECHNIQUES_COMPARISON
+from data_info import chunking_strategies_comparison_df, get_proposition_prompt_text, VECTOR_STORES_COMPARISON, RERANKING_TECHNIQUES_COMPARISON, RETRIEVAL_TECHNIQUES_COMPARISON, RETRIEVAL_EMBEDDINGS_COMPARISON
 import json
 
 # Set page configuration
@@ -584,9 +584,12 @@ def render_chunking_section():
 def render_embeddings_section():
     # Embedding Model Selection UI
     st.subheader("Embedding Model Selection")
-    
-    # Simple explanation for users and junior devs:
-    st.markdown("Embeddings turn text into numbers (vectors) so we can compare meaning quantitatively. There dense and sparse types.")
+    st.markdown("Embeddings turn text into numbers (vectors) so we can compare meaning quantitatively. There are dense and sparse types.")
+
+    # Vector Stores dtaframe comparison
+    with st.expander("Embedding types Comparison"):
+        df = pd.DataFrame(RETRIEVAL_EMBEDDINGS_COMPARISON)
+        st.dataframe(df, hide_index=True)
 
     with st.expander("Select chunking source", expanded=False):
 

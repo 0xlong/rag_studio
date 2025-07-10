@@ -173,3 +173,22 @@ RETRIEVAL_TECHNIQUES_COMPARISON = {
         'RAG applications needing both semantic and keyword precision, such as mixed query types or when dealing with structured and unstructured data.'
     ]
 }
+
+RETRIEVAL_EMBEDDINGS_COMPARISON = {
+    'Embedding': [
+        'Dense Embedding',
+        'Sparse Embedding'
+    ],
+    'Pros': [
+        'Captures semantic context, great for complex queries, robust to synonyms.',
+        'Fast, excels at keyword matching, suits structured data.'
+    ],
+    'Cons': [
+        'Computation-heavy, needs large models, may miss exact matches.',
+        'Limited to keywords, weak on semantic nuances.'
+    ],
+    'Best for RAG': [
+        'Conversational AI, contextual Q&A with natural language queries.',
+        'Code search, entity retrieval, structured data queries.'
+    ]
+}
