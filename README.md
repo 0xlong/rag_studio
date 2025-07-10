@@ -71,7 +71,7 @@ Show what your app looks like. Replace the placeholder with your own images or G
 -->
 ## Screenshots
 
-[Screenshot1](app_screenshot.png)
+[Screenshot1](/app_screenshot.PNG)
 
 
 <!--
