@@ -843,7 +843,7 @@ def render_vector_stores_section():
         both_embedding_files = sparse_embedding_files + dense_embedding_files
         
         # 2. Let the user select a file
-        st.write('Choose embeddings')
+        #st.write('Choose embeddings')
         embedding_file = st.segmented_control(
             "Select embedding file",
             both_embedding_files,
@@ -963,7 +963,10 @@ def render_vector_stores_section():
 
                 # A spinner is shown to the user to indicate that a process is running.
                 with st.spinner(f"Creating {vector_store} vector store..."):
-                
+                    
+                    if 'embedding_provider' and 'embedding_provider' not in st.session_state:
+                        st.info("Used default Google-embedding-001 model as these were not set in Embeddings section")
+
                     # 3. Retrieve the embedded documents from the session state.
                     embedded_docs = st.session_state.embedded_documents
                     
@@ -975,14 +978,14 @@ def render_vector_stores_section():
                         docs=embedded_docs,
                         vector_store_type=vector_store.lower(),
                         vector_store_config=vector_store_config,
-                        embedding_provider=st.session_state.get('embedding_provider'),
-                        embedding_model_name=st.session_state.get('embedding_model_name')
+                        embedding_provider=st.session_state.get('embedding_provider','Google'),
+                        embedding_model_name=st.session_state.get('embedding_model_name','embedding-001')
                     )
                     
                     # 5. Store the returned vector store object (handle) in the session state.
                     #    This allows us to reuse the vector store in other parts of the app, like the Retrieval section.
                     st.session_state.vector_store = vector_store_handle
-                    
+
                     # 6. Display a success message to the user.
                     st.success(f"Successfully created and loaded {vector_store} vector store! - {vector_store_handle}")
                     with st.expander("Retrieved docs", expanded = True):
@@ -994,8 +997,6 @@ def render_vector_stores_section():
                                                                                                             {"$contains": "xxxsandra"}]
                                                                                                         } 
                                                                                 })
-                        # check if retriever works
-                        #st.write(retriever.invoke("which car?"))
             else:
                 # If no embedded documents are found, a warning is shown to the user.
                 st.warning("Please embed your documents first in the Embeddings section.")
