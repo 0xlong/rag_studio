@@ -586,11 +586,8 @@ def render_embeddings_section():
     # Simple explanation for users and junior devs:
     st.markdown("Embeddings turn text into numbers (vectors) so we can compare meaning quantitatively. There dense and sparse types.")
 
-    # Choose chunking file
     with st.expander("Select chunking source", expanded=False):
-
         st.info("Chunking documents exist. Change it below if You wanna change data.")
-
         # 1. List all chunking files in the data/chunking directory (JSON only)
         chunking_dir = os.path.join("data", "chunking")
         chunking_files = [f for f in os.listdir(chunking_dir) if f.endswith(".json")]
@@ -612,203 +609,204 @@ def render_embeddings_section():
                 # Store in session state for use in embedding, etc.
                 st.session_state.chunked_documents = chunked_data
                 st.success(f"Loaded {len(chunked_data)} chunks from {selected_file}")
- 
+
             except Exception as e:
                 st.error(f"Error loading file: {e}")
                 chunked_data = []
-            
+                
+    if 'chunked_documents' in st.session_state:
 
-    # Create two columns: one for Dense Embeddings, one for Sparse Embeddings
-    col_dense, col_sparse = st.columns(2, border=True)
+        # Create two columns: one for Dense Embeddings, one for Sparse Embeddings
+        col_dense, col_sparse = st.columns(2, border=True)
 
-    # --- DENSE EMBEDDINGS COLUMN ---
-    with col_dense:
-        st.markdown("#### Dense Embeddings")
-        st.markdown("Use neural networks to capture context (good for semantic search).")
-        # Dense embeddings are continuous vector representations, typically from neural models (OpenAI, Google, Hugging Face)
-        # These are good for capturing semantic similarity
-        with st.expander("Select Provider and Model", expanded=False):
-            # Let user choose the provider (OpenAI, Google, Hugging Face)
-            embedding_provider = st.segmented_control(
-                "Select Provider",
-                ["OpenAI", "Google", "Hugging Face"]
-            )
-            # Let user choose the model based on provider
-            if embedding_provider == "OpenAI":
-                model = st.segmented_control(
-                    "Select Model",
-                    ["text-embedding-3-small", "text-embedding-3-large"]
+        # --- DENSE EMBEDDINGS COLUMN ---
+        with col_dense:
+            st.markdown("#### Dense Embeddings")
+            st.markdown("Use neural networks to capture context (good for semantic search).")
+            # Dense embeddings are continuous vector representations, typically from neural models (OpenAI, Google, Hugging Face)
+            # These are good for capturing semantic similarity
+            with st.expander("Select Provider and Model", expanded=False):
+                # Let user choose the provider (OpenAI, Google, Hugging Face)
+                embedding_provider = st.segmented_control(
+                    "Select Provider",
+                    ["OpenAI", "Google", "Hugging Face"]
                 )
-            elif embedding_provider == "Google":
-                model = st.segmented_control(
-                    "Select Model",
-                    ["embedding-001", "textembedding-gecko"]
-                )
-            else:  # Hugging Face
-                model = st.segmented_control(
-                    "Select Model",
-                    ["sentence-transformers/all-MiniLM-L6-v2", "sentence-transformers/all-mpnet-base-v2"]
-                )
-            # Comment: This expander groups all model/provider selection logic for clarity and better UX
-
-
-        #st.success(f"Provider - {embedding_provider} with Model - {model}")
-
-        # Expander for embedding parameters
-        if 'model' in locals() and model:
-            with st.expander("Select Parameters", expanded=False):
-                # Let user set batch size for embedding computation
-                if embedding_provider in ["OpenAI", "Google"]:
-                    batch_size = st.slider(
-                        "Batch Size",
-                        1,
-                        250 if embedding_provider == "Google" else 2048,
-                        32,
-                        help=(
-                            "Batch size controls how many texts are sent to the embedding API at once. "
-                            "Higher values can make embedding much faster by processing more texts in parallel, "
-                            "but if set too high, you may hit API rate limits, get errors, or run out of memory. "
-                            "Lower values are safer but slower. "
-                            "For most users, the default (32) is a good balance. "
-                            "If you see errors, try lowering this value. "
-                            "If you want faster processing and have a high API quota, you can try increasing it."
-                        )
-                    )
-                # For OpenAI and Google, let user set embedding dimensions (vector size)
+                # Let user choose the model based on provider
                 if embedding_provider == "OpenAI":
-                    default_dim = 1536 if model == "text-embedding-3-small" else 3072
-                    min_dim = 256
-                    max_dim = default_dim
-                    dimensions = st.slider(
-                        "Embedding Dimensions",
-                        min_value=min_dim,
-                        max_value=max_dim,
-                        value=default_dim,
-                        help=f"Controls the size of the embedding vector. Default for {model} is {default_dim}. Lower values use less memory but may reduce quality."
+                    model = st.segmented_control(
+                        "Select Model",
+                        ["text-embedding-3-small", "text-embedding-3-large"]
                     )
                 elif embedding_provider == "Google":
-                    if model == "gemini-embedding-001":
-                        default_dim = 3072
+                    model = st.segmented_control(
+                        "Select Model",
+                        ["embedding-001", "text-embedding-004"]
+                    )
+                else:  # Hugging Face
+                    model = st.segmented_control(
+                        "Select Model",
+                        ["sentence-transformers/all-MiniLM-L6-v2", "sentence-transformers/all-mpnet-base-v2"]
+                    )
+                # Comment: This expander groups all model/provider selection logic for clarity and better UX
+
+
+            #st.success(f"Provider - {embedding_provider} with Model - {model}")
+
+            # Expander for embedding parameters
+            if 'model' in locals() and model:
+                with st.expander("Select Parameters", expanded=False):
+                    # Let user set batch size for embedding computation
+                    if embedding_provider in ["OpenAI", "Google"]:
+                        batch_size = st.slider(
+                            "Batch Size",
+                            1,
+                            250 if embedding_provider == "Google" else 2048,
+                            32,
+                            help=(
+                                "Batch size controls how many texts are sent to the embedding API at once. "
+                                "Higher values can make embedding much faster by processing more texts in parallel, "
+                                "but if set too high, you may hit API rate limits, get errors, or run out of memory. "
+                                "Lower values are safer but slower. "
+                                "For most users, the default (32) is a good balance. "
+                                "If you see errors, try lowering this value. "
+                                "If you want faster processing and have a high API quota, you can try increasing it."
+                            )
+                        )
+                    # For OpenAI and Google, let user set embedding dimensions (vector size)
+                    if embedding_provider == "OpenAI":
+                        default_dim = 1536 if model == "text-embedding-3-small" else 3072
+                        min_dim = 256
+                        max_dim = default_dim
+                        dimensions = st.slider(
+                            "Embedding Dimensions",
+                            min_value=min_dim,
+                            max_value=max_dim,
+                            value=default_dim,
+                            help=f"Controls the size of the embedding vector. Default for {model} is {default_dim}. Lower values use less memory but may reduce quality."
+                        )
+                    elif embedding_provider == "Google":
+                        if model == "gemini-embedding-001":
+                            default_dim = 3072
+                        else:
+                            default_dim = 768
+                        min_dim = 128
+                        max_dim = default_dim
+                        dimensions = st.slider(
+                            "Embedding Dimensions",
+                            min_value=min_dim,
+                            max_value=max_dim,
+                            value=default_dim,
+                            help=f"Controls the size of the embedding vector. Default for {model} is {default_dim}. Lower values use less memory but may reduce quality."
+                        )
+                # save all params in session state for later use
+                st.session_state['embedding_provider'] = embedding_provider
+                st.session_state['embedding_model_name'] = model
+                st.session_state['embedding_dimensions'] = dimensions
+
+                if st.button("Embed (Dense)", type='primary', key="embed_dense"):
+
+                    # 1. Check if chunked documents exist in session state
+                    if 'chunked_documents' not in st.session_state or not st.session_state.chunked_documents:
+                        st.warning("Please chunk your documents first (see the Chunking section).")
                     else:
-                        default_dim = 768
-                    min_dim = 128
-                    max_dim = default_dim
-                    dimensions = st.slider(
-                        "Embedding Dimensions",
-                        min_value=min_dim,
-                        max_value=max_dim,
-                        value=default_dim,
-                        help=f"Controls the size of the embedding vector. Default for {model} is {default_dim}. Lower values use less memory but may reduce quality."
-                    )
-            # save all params in session state for later use
-            st.session_state['embedding_provider'] = embedding_provider
-            st.session_state['embedding_model_name'] = model
-            st.session_state['embedding_dimensions'] = dimensions
+                        
+                        # 3. Get the model name from UI
+                        model_name = model
 
-            if st.button("Embed (Dense)", type='primary', key="embed_dense"):
+                        # 4. Get the chunked docs
+                        chunked_docs = st.session_state.chunked_documents
 
-                # 1. Check if chunked documents exist in session state
-                if 'chunked_documents' not in st.session_state or not st.session_state.chunked_documents:
-                    st.warning("Please chunk your documents first (see the Chunking section).")
-                else:
+                        # 5. Call embed_dense from backend.py
+                        with st.spinner("Computing dense embeddings (may take a while for large data)..."):
+                            try:
+                                embedded_docs = embed_dense(chunked_docs, embedding_provider, model_name, dimensions)
+                                st.write("Lenght of embeddings", len(embedded_docs[0]['embedding']))
+                                # 6. Store in session state for later use
+                                st.session_state.embedded_documents = embedded_docs
+                                
+                                # 7. Show summary and example
+                                st.success(f"Dense embedding complete! Total chunks embedded: {len(embedded_docs)}")
+                                with st.expander("Example embedded chunk"):
+                                    # Show the first chunk's content and a preview of its embedding
+                                    st.write("**Chunk content:**", embedded_docs[0]['content'])
+                                    st.write("**Embedding (first 10 dims):**", embedded_docs[0]['embedding'][:10])
+                            except Exception as e:
+                                st.error(f"Error during dense embedding: {str(e)}")
+                    # --- DENSE EMBEDDING LOGIC ENDS HERE ---
+
+        # --- SPARSE EMBEDDINGS COLUMN ---
+        with col_sparse:
+            st.markdown("#### Sparse Embeddings")
+            st.markdown("Use classic methods to focus on keywords (good for keyword search).")
+            # Sparse embeddings are high-dimensional, mostly-zero vectors, often from traditional IR models (BM25, SPLADE, etc.)
+            # These are good for keyword-based retrieval and can complement dense embeddings
+            with st.expander("Select Sparse Model", expanded=False):
+                # Use a key so the value persists in session_state
+                sparse_model = st.segmented_control(
+                    "Sparse Model",
+                    ["BM25", "TF-IDF"],
+                    key="sparse_model_selection",
+                    help="Sparse models are useful for keyword-based retrieval. BM25 is classic, SPLADE is neural, TF-IDF is simple."
+                )
+
+            # Always get the value from session_state
+            sparse_model = st.session_state.get("sparse_model_selection")
+
+            if sparse_model:
+                with st.expander("Sparse Model Parameters", expanded=False):
+                    if sparse_model == "BM25":
+                        k1 = st.slider(
+                            "k1 (BM25 parameter)", 0.5, 3.0, 1.5, step=0.1,
+                            help="k1 controls how much term frequency (word count) boosts the score. ..."
+                        )
+                        b = st.slider(
+                            "b (BM25 parameter)", 0.0, 1.0, 0.75, step=0.01,
+                            help="b controls how much to normalize for document length. ..."
+                        )
+                        st.session_state['embedding_sparse_kparam'] = k1
+                        st.session_state['embedding_sparse_bparam'] = b
+
+                # --- SPARSE EMBEDDING BUTTON AND LOGIC ---
+                if st.button("Embed (Sparse)", type='primary', key="embed_sparse"):
                     
-                    # 3. Get the model name from UI
-                    model_name = model
+                    # Save the method in session_state for later use
+                    st.session_state['embedding_sparse_method'] = sparse_model.lower().replace("-", "")
 
-                    # 4. Get the chunked docs
-                    chunked_docs = st.session_state.chunked_documents
-
-                    # 5. Call embed_dense from backend.py
-                    with st.spinner("Computing dense embeddings (may take a while for large data)..."):
-                        try:
-                            embedded_docs = embed_dense(chunked_docs, embedding_provider, model_name, dimensions)
-                            st.write("Lenght of embeddings", len(embedded_docs[0]['embedding']))
-                            # 6. Store in session state for later use
-                            st.session_state.embedded_documents = embedded_docs
-                            
-                            # 7. Show summary and example
-                            st.success(f"Dense embedding complete! Total chunks embedded: {len(embedded_docs)}")
-                            with st.expander("Example embedded chunk"):
-                                # Show the first chunk's content and a preview of its embedding
-                                st.write("**Chunk content:**", embedded_docs[0]['content'])
-                                st.write("**Embedding (first 10 dims):**", embedded_docs[0]['embedding'][:10])
-                        except Exception as e:
-                            st.error(f"Error during dense embedding: {str(e)}")
-                # --- DENSE EMBEDDING LOGIC ENDS HERE ---
-
-    # --- SPARSE EMBEDDINGS COLUMN ---
-    with col_sparse:
-        st.markdown("#### Sparse Embeddings")
-        st.markdown("Use classic methods to focus on keywords (good for keyword search).")
-        # Sparse embeddings are high-dimensional, mostly-zero vectors, often from traditional IR models (BM25, SPLADE, etc.)
-        # These are good for keyword-based retrieval and can complement dense embeddings
-        with st.expander("Select Sparse Model", expanded=False):
-            # Use a key so the value persists in session_state
-            sparse_model = st.segmented_control(
-                "Sparse Model",
-                ["BM25", "TF-IDF"],
-                key="sparse_model_selection",
-                help="Sparse models are useful for keyword-based retrieval. BM25 is classic, SPLADE is neural, TF-IDF is simple."
-            )
-
-        # Always get the value from session_state
-        sparse_model = st.session_state.get("sparse_model_selection")
-
-        if sparse_model:
-            with st.expander("Sparse Model Parameters", expanded=False):
-                if sparse_model == "BM25":
-                    k1 = st.slider(
-                        "k1 (BM25 parameter)", 0.5, 3.0, 1.5, step=0.1,
-                        help="k1 controls how much term frequency (word count) boosts the score. ..."
-                    )
-                    b = st.slider(
-                        "b (BM25 parameter)", 0.0, 1.0, 0.75, step=0.01,
-                        help="b controls how much to normalize for document length. ..."
-                    )
-                    st.session_state['embedding_sparse_kparam'] = k1
-                    st.session_state['embedding_sparse_bparam'] = b
-
-            # --- SPARSE EMBEDDING BUTTON AND LOGIC ---
-            if st.button("Embed (Sparse)", type='primary', key="embed_sparse"):
-                
-                # Save the method in session_state for later use
-                st.session_state['embedding_sparse_method'] = sparse_model.lower().replace("-", "")
-
-                # 1. Check if chunked documents exist in session state
-                if 'chunked_documents' not in st.session_state or not st.session_state.chunked_documents:
-                    st.warning("Please chunk your documents first (see the Chunking section) or use chunked files.")
-                else:
-                    # 2. Get the chunked docs
-                    chunked_docs = st.session_state.chunked_documents
-                    # 3. Determine method for embed_sparse
-                    method = 'bm25' if sparse_model == 'BM25' else 'tfidf'
-                    # 4. Call embed_sparse from backend.py
-                    # For BM25, pass k1 and b from session state (set in the UI above)
-                    with st.spinner("Computing sparse embeddings (this is fast)..."):
-                        try:
-                            if method == 'bm25':
-                                # Pass k1 and b from UI to backend for BM25
-                                embedded_docs = embed_sparse(
-                                    chunked_docs,
-                                    method=st.session_state['embedding_sparse_method'],
-                                    k1=st.session_state.get('embedding_sparse_kparam', 1.5),
-                                    b=st.session_state.get('embedding_sparse_bparam', 0.75)
-                                )
-                            else:
-                                # For TF-IDF, just call with method
-                                embedded_docs = embed_sparse(chunked_docs, method=method)
-                            # 5. Store in session state for later use
-                            st.session_state.embedded_documents_sparse = embedded_docs
-                            st.write(embedded_docs)
-                            
-                            # 6. Show summary and example
-                            st.success(f"Sparse embedding complete! Total chunks embedded: {len(embedded_docs)}")
-                            with st.expander("Example embedded chunk (Sparse)"):
-                                # Show the first chunk's content and a preview of its embedding
-                                st.write("**Chunk content:**", embedded_docs[0]['content'])
-                                st.write("**Embedding (first 10 dims):**", embedded_docs[0]['embedding_sparse'][:10])
-                        except Exception as e:
-                            st.error(f"Error during sparse embedding: {str(e)}")
+                    # 1. Check if chunked documents exist in session state
+                    if 'chunked_documents' not in st.session_state or not st.session_state.chunked_documents:
+                        st.warning("Please chunk your documents first (see the Chunking section) or use chunked files.")
+                    else:
+                        # 2. Get the chunked docs
+                        chunked_docs = st.session_state.chunked_documents
+                        # 3. Determine method for embed_sparse
+                        method = 'bm25' if sparse_model == 'BM25' else 'tfidf'
+                        # 4. Call embed_sparse from backend.py
+                        # For BM25, pass k1 and b from session state (set in the UI above)
+                        with st.spinner("Computing sparse embeddings (this is fast)..."):
+                            try:
+                                if method == 'bm25':
+                                    # Pass k1 and b from UI to backend for BM25
+                                    embedded_docs = embed_sparse(
+                                        chunked_docs,
+                                        method=st.session_state['embedding_sparse_method'],
+                                        k1=st.session_state.get('embedding_sparse_kparam', 1.5),
+                                        b=st.session_state.get('embedding_sparse_bparam', 0.75)
+                                    )
+                                else:
+                                    # For TF-IDF, just call with method
+                                    embedded_docs = embed_sparse(chunked_docs, method=method)
+                                # 5. Store in session state for later use
+                                st.session_state.embedded_documents_sparse = embedded_docs
+                                st.write(embedded_docs)
+                                
+                                # 6. Show summary and example
+                                st.success(f"Sparse embedding complete! Total chunks embedded: {len(embedded_docs)}")
+                                with st.expander("Example embedded chunk (Sparse)"):
+                                    # Show the first chunk's content and a preview of its embedding
+                                    st.write("**Chunk content:**", embedded_docs[0]['content'])
+                                    st.write("**Embedding (first 10 dims):**", embedded_docs[0]['embedding_sparse'][:10])
+                            except Exception as e:
+                                st.error(f"Error during sparse embedding: {str(e)}")
 
 def render_vector_stores_section():
 
@@ -824,31 +822,40 @@ def render_vector_stores_section():
 
     # Choose chunking file
     with st.expander("Select embeddings source", expanded=False):
-        if 'embedded_documents' in st.session_state:
-            st.info("Embeddings exist. Change it below if You wanna change data.")
+
+        if 'embedded_documents' in st.session_state and not 'embedded_documents_sparse' in st.session_state:
+            st.success("Dense Embeddings exist. Change it below if You wanna change data.")
+        elif 'embedded_documents_sparse' in st.session_state and not 'embedded_documents' in st.session_state :
+            st.success("Sparse Embeddings exist. Change it below if You wanna change data.")
+        elif 'embedded_documents_sparse' and 'embedded_documents' in st.session_state:
+            st.success("Dense and Sparse Embeddings exist. Change it below if You wanna change data.")
         else:
-            st.info("Embeddings does not exist. Create it or choose from available.")
+            st.info("Embeddings does not exist. Create it in EMbeddings seciton or choose from available.")
 
-        st.write(
-            f"Provider: {st.session_state.get('embedding_provider')}\n"
-            f"Model: {st.session_state.get('embedding_model_name')}\n"
-            f"Dimensions: {st.session_state.get('embedding_dimensions')}"
-        )
 
-        # list embedding files
-        embedding_dir = os.path.join("data", "embeddings","dense")
-        embedding_files = [f for f in os.listdir(embedding_dir) if f.endswith(".json")]
+        # list dense embedding files
+        embedding_dir_dense = os.path.join("data", "embeddings","dense")
+        dense_embedding_files = [f for f in os.listdir(embedding_dir_dense) if f.endswith(".json")]
+        
+        embedding_dir_sparse = os.path.join("data", "embeddings","sparse")
+        sparse_embedding_files = [f for f in os.listdir(embedding_dir_sparse) if f.endswith(".json")]
 
+        both_embedding_files = sparse_embedding_files + dense_embedding_files
+        
         # 2. Let the user select a file
+        st.write('Choose embeddings')
         embedding_file = st.segmented_control(
             "Select embedding file",
-            embedding_files,
+            both_embedding_files,
             label_visibility="collapsed"
         )
 
         # 3. Load the selected file when chosen
         if embedding_file:
-            file_path = os.path.join(embedding_dir, embedding_file)
+            if 'sparse' in embedding_file:
+                file_path = os.path.join(embedding_dir_sparse, embedding_file)
+            else:
+                file_path = os.path.join(embedding_dir_dense, embedding_file)
             try:
                 # Load the JSON file as a list of dicts (each dict is a chunk)
                 with open(file_path, 'r', encoding='utf-8') as f:

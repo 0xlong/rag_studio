@@ -592,8 +592,9 @@ def embed_dense(
         # Now each chunk has its embedding
 
     # --- Save all chunked_docs with embeddings to a JSON file ---
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     os.makedirs('data/embeddings/dense', exist_ok=True)  # Ensure the directory exists
-    with open(f'data/embeddings/dense/embeddings_dense_{provider}_{model_name.replace("/", "_")}.json', 'w', encoding='utf-8') as f:
+    with open(f'data/embeddings/dense/embeddings_dense_{provider}_{model_name.replace("/", "_")}_{timestamp}.json', 'w', encoding='utf-8') as f:
         # Save the list of dicts as a JSON array
         json.dump(chunked_docs, f, ensure_ascii=False, indent=2)
 
@@ -643,8 +644,9 @@ def embed_sparse(
         raise ValueError(f"Unsupported sparse embedding method: {method}")
 
     # --- Save all chunked_docs with embeddings to a JSON file ---
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     os.makedirs('data/embeddings/sparse', exist_ok=True)  # Ensure the directory exists
-    with open(f'data/embeddings/sparse/embeddings_sparse_{method}.json', 'w', encoding='utf-8') as f:
+    with open(f'data/embeddings/sparse/embeddings_sparse_{method}_{timestamp}.json', 'w', encoding='utf-8') as f:
         json.dump(chunked_docs, f, ensure_ascii=False, indent=2)
     # This file can be loaded later for search or analysis
 

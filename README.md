@@ -234,9 +234,7 @@ Cite papers, tutorials, or external resources.
 State the license for your project.
 -->
 ## License
-<!--
-Specify your license, e.g. MIT, Apache 2.0, etc.
--->
+This project is licensed under the MIT License.
 
 <!--
 ====================
