@@ -70,10 +70,9 @@ List the main features of your project. Use emojis for clarity and visual appeal
 Show what your app looks like. Replace the placeholder with your own images or GIFs.
 -->
 ## Screenshots
-<!--
-![Screenshot1](path/to/screenshot1.png)
-![Demo GIF](path/to/demo.gif)
--->
+
+[Screenshot1](app_screenshot.png)
+
 
 <!--
 ====================
