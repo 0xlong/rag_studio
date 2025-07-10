@@ -120,26 +120,20 @@ with st.sidebar:
             },
         }
     )
-    # --- Add Clear Cache Button at the bottom of the sidebar ---
-    # This button will clear all Streamlit session state variables when clicked.
-    # We use st.button and place it after the menu so it appears at the bottom.
-    st.markdown("<br><br><br><br><br><br><br><br>", unsafe_allow_html=True)  # Horizontal line for separation
-    if st.button("Clear Cache"):
-        # Loop through all keys in session_state and delete them
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
+
 
 # Main content area
 def render_data_section():
     
     # Data Source Configuration
     st.subheader("Data Source Configuration")
-    data_source = st.selectbox(
-        " ",
+    st.markdown("Choose data for Your RAG pipeline from options below.")
+
+    data_source = st.segmented_control(
+        "",
         ["Local Files", "Web Content", "Databases", "APIs & Notions"],
-        placeholder="Select Data Source",  
-        index=0
     )
+    st.markdown("""<br>""", unsafe_allow_html=True)
     
     if data_source == "Local Files":
         uploaded_files = st.file_uploader(
@@ -595,7 +589,12 @@ def render_embeddings_section():
     st.markdown("Embeddings turn text into numbers (vectors) so we can compare meaning quantitatively. There dense and sparse types.")
 
     with st.expander("Select chunking source", expanded=False):
-        st.info("Chunking documents exist. Change it below if You wanna change data.")
+
+        if 'chunked_documents' in st.session_state:
+            st.info("Chunking documents exist. Change it below if You wanna change data.")
+        else:
+            st.info("Chunking documents does not exist. Create it in Chunking section or choose from available.")
+
         # 1. List all chunking files in the data/chunking directory (JSON only)
         chunking_dir = os.path.join("data", "chunking")
         chunking_files = [f for f in os.listdir(chunking_dir) if f.endswith(".json")]
